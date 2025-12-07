@@ -5,6 +5,7 @@ from typing import Callable, TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .theme import LayoutStyle, ThemeOverrides, ThemeContext
+    from .slide_deck import SlideDeck
 
 
 @dataclass
@@ -25,6 +26,7 @@ class Slide:
     :ivar step_names: Names for each step. Auto-generated if not provided.
     :ivar step_durations: Duration in seconds for each step. If None, uses deck default.
     :ivar transition_duration: Duration of transition animation to this slide in seconds.
+    :ivar data: Parsed/resolved content dict for layout elements.
     """
     name: str = ''
     layout: str = ''
@@ -40,6 +42,7 @@ class Slide:
     step_names: list[str] | None = None
     step_durations: list[float] | None = None
     transition_duration: float = 0.0
+    data: dict[str, Any] = field(default_factory=dict)  # Parsed/resolved content for elements
     
     def has_custom_builder(self) -> bool:
         """🔧 Check if slide uses a custom builder function."""
@@ -81,15 +84,21 @@ class Slide:
             from .theme import ThemeOverrides
             self.theme_overrides = ThemeOverrides()
     
-    def get_style(self, master_slide: 'Slide | None' = None) -> 'LayoutStyle':
+    def get_style(
+        self,
+        master_slide: 'Slide | None' = None,
+        deck: 'SlideDeck | None' = None,
+    ) -> 'LayoutStyle':
         """🎨 Get the style for this slide.
         
         Returns style in priority order:
         1. This slide's style (if set)
         2. Master layout's style (if using a layout)
-        3. Default content style
+        3. Deck's default_style (if set)
+        4. Default content style
         
         :param master_slide: The resolved master layout slide.
+        :param deck: The parent deck for default_style fallback.
         :return: LayoutStyle for styling elements.
         """
         from .theme import LayoutStyle
@@ -101,6 +110,10 @@ class Slide:
         # Use master layout's style if available
         if master_slide is not None and master_slide.style is not None:
             return master_slide.style
+        
+        # Use deck's default style if available
+        if deck is not None and deck.default_style is not None:
+            return deck.default_style
         
         # Default to empty style
         return LayoutStyle()
@@ -116,7 +129,12 @@ class Slide:
         """
         return self.get_style(master_slide).to_tailwind(element)
     
-    def build(self, step: int = 0, master_slide: 'Slide | None' = None) -> None:
+    def build(
+        self,
+        step: int = 0,
+        master_slide: 'Slide | None' = None,
+        deck: 'SlideDeck | None' = None,
+    ) -> None:
         """🏗️ Build this slide, optionally layered on top of a master slide.
         
         Slides can be composed: master renders first, then this slide layers on top.
@@ -124,6 +142,7 @@ class Slide:
         
         :param step: Current step index for incremental reveals.
         :param master_slide: Optional master slide to render as base layer.
+        :param deck: Parent deck for style cascade fallback.
         """
         from nicegui import ui
         import inspect
@@ -133,16 +152,21 @@ class Slide:
             with ui.element('div').classes('w-full h-full relative'):
                 # Layer 0: Master slide
                 with ui.element('div').classes('absolute inset-0 z-0'):
-                    master_slide.build(step=step, master_slide=None)
+                    master_slide.build(step=step, master_slide=None, deck=deck)
                 
                 # Layer 1: This slide's content
                 with ui.element('div').classes('absolute inset-0 z-10'):
-                    self._build_content(step, master_slide)
+                    self._build_content(step, master_slide, deck)
         else:
             # Simple mode: just render content directly
-            self._build_content(step, None)
+            self._build_content(step, None, deck)
     
-    def _build_content(self, step: int = 0, master_slide: 'Slide | None' = None) -> None:
+    def _build_content(
+        self,
+        step: int = 0,
+        master_slide: 'Slide | None' = None,
+        deck: 'SlideDeck | None' = None,
+    ) -> None:
         """🏗️ Build slide content (custom builder or default)."""
         import inspect
         
@@ -153,14 +177,19 @@ class Slide:
             else:
                 self.builder()
         else:
-            self._build_default_content(step, master_slide)
+            self._build_default_content(step, master_slide, deck)
     
-    def _build_default_content(self, step: int = 0, master_slide: 'Slide | None' = None) -> None:
+    def _build_default_content(
+        self,
+        step: int = 0,
+        master_slide: 'Slide | None' = None,
+        deck: 'SlideDeck | None' = None,
+    ) -> None:
         """🖼️ Build default slide content (title, subtitle, content)."""
         from nicegui import ui
         
-        # Get style from theme
-        style = self.get_style(master_slide)
+        # Get style from theme (cascade: slide → master → deck → default)
+        style = self.get_style(master_slide, deck)
         
         # Background style
         bg_style = ''
@@ -171,13 +200,17 @@ class Slide:
                 bg_style = f'background-color: {self.background_color};'
         
         with ui.element('div').classes('w-full h-full').style(bg_style):
-            with ui.column().classes(f'w-full h-full items-center justify-center gap-6 p-12 {style.to_tailwind("text")}'):
+            # Use styles from theme (includes default sizes for 1920x1080)
+            with ui.column().classes(f'w-full h-full items-center justify-center p-16 {style.to_tailwind("text")}').style('gap: 2rem;'):
                 if self.title:
-                    ui.label(self.title).classes(f'text-6xl font-bold text-center {style.to_tailwind("title")}')
+                    title_css = style.to_css('title') or 'font-size: 5rem;'
+                    ui.label(self.title).classes(f'text-center {style.to_tailwind("title")}').style(f'{title_css}; line-height: 1.1;')
                 if self.subtitle:
-                    ui.label(self.subtitle).classes(f'text-3xl text-center {style.to_tailwind("subtitle")}')
+                    subtitle_css = style.to_css('subtitle') or 'font-size: 2.5rem;'
+                    ui.label(self.subtitle).classes(f'text-center {style.to_tailwind("subtitle")}').style(f'{subtitle_css}; line-height: 1.3;')
                 if self.content:
-                    ui.markdown(self.content).classes(f'text-2xl text-center max-w-5xl nicegui-markdown-large {style.to_tailwind("text")}')
+                    text_css = style.to_css('text') or 'font-size: 2rem;'
+                    ui.markdown(self.content).classes(f'text-center max-w-6xl {style.to_tailwind("text")}').style(f'{text_css}; line-height: 1.6;')
     
     def get_step_name(self, step: int) -> str:
         """🏷️ Get name for a specific step.

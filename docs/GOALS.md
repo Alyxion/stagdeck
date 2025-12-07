@@ -64,6 +64,12 @@ StagDeck aims to be a powerful, accessible presentation tool built on NiceGUI th
 - **No background/foreground distinction**: All images are just layers; master provides the base, slide adds content
 - **Separation of design and content**: Designers create master layouts, presenters focus on content
 
+### 11. One Slide Per File (Essential)
+- **Separation of concerns**: Each slide layout lives in its own Python file
+- **Easy navigation**: Find and edit slides quickly in the file tree
+- **Clean imports**: Import only the slides you need
+- **Reusability**: Copy individual slide files between projects
+
 ## Non-Goals
 
 - **Not a WYSIWYG editor**: StagDeck uses text-based authoring (Markdown or Python)

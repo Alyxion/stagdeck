@@ -3,8 +3,10 @@
 from .slide import Slide
 from .slide_deck import SlideDeck
 from .viewer import DeckViewer
+from .app import App
 from .registry import DeckRegistry, registry, register_deck, get_deck
-from .theme import Theme, DEFAULT_THEME, ElementStyle, LayoutStyle
+from .theme import Theme, ElementStyle, LayoutStyle
+from .renderer import SlideRenderer, setup_render_endpoint
 
 
 def format_duration(seconds: float) -> str:
@@ -21,13 +23,15 @@ __all__ = [
     'Slide',
     'SlideDeck',
     'DeckViewer',
+    'App',
     'DeckRegistry',
     'registry',
     'register_deck',
     'get_deck',
     'format_duration',
     'Theme',
-    'DEFAULT_THEME',
     'ElementStyle',
     'LayoutStyle',
+    'SlideRenderer',
+    'setup_render_endpoint',
 ]

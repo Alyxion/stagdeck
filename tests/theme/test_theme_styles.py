@@ -1,8 +1,8 @@
-"""Tests for ElementStyle and LayoutStyle."""
+"""Tests for ElementStyle and SlideStyle."""
 
 import pytest
 
-from stagdeck.theme import ElementStyle, LayoutStyle
+from stagdeck.theme import ElementStyle, SlideStyle
 
 
 class TestElementStyle:
@@ -19,29 +19,29 @@ class TestElementStyle:
         style = ElementStyle(color='#ff0000')
         assert style.color == '#ff0000'
     
-    def test_to_tailwind_hex_color(self):
-        """Convert hex color to Tailwind class."""
+    def test_to_css_includes_color(self):
+        """CSS output includes color."""
         style = ElementStyle(color='#ff0000')
-        classes = style.to_tailwind()
-        assert 'text-[#ff0000]' in classes
+        css = style.to_css()
+        assert 'color: #ff0000' in css
     
-    def test_to_tailwind_existing_class(self):
-        """Pass through existing Tailwind class."""
-        style = ElementStyle(color='text-white')
-        classes = style.to_tailwind()
-        assert 'text-white' in classes
-    
-    def test_to_tailwind_weight(self):
-        """Convert weight to Tailwind class."""
+    def test_to_css_includes_weight(self):
+        """CSS output includes font-weight."""
         style = ElementStyle(weight='bold')
-        classes = style.to_tailwind()
-        assert 'font-bold' in classes
+        css = style.to_css()
+        assert 'font-weight: bold' in css
     
-    def test_to_tailwind_size(self):
-        """Convert size to Tailwind class."""
+    def test_to_css_includes_size_px(self):
+        """CSS output includes font-size in px."""
         style = ElementStyle(size=24)
-        classes = style.to_tailwind()
-        assert 'text-2xl' in classes
+        css = style.to_css()
+        assert 'font-size: 24px' in css
+    
+    def test_to_css_includes_size_string(self):
+        """CSS output includes font-size as string."""
+        style = ElementStyle(size='2rem')
+        css = style.to_css()
+        assert 'font-size: 2rem' in css
     
     def test_to_tailwind_opacity(self):
         """Convert opacity to Tailwind class."""
@@ -49,11 +49,12 @@ class TestElementStyle:
         classes = style.to_tailwind()
         assert 'opacity-50' in classes
     
-    def test_to_css_color(self):
-        """Convert to CSS style string."""
-        style = ElementStyle(color='#ff0000')
-        css = style.to_css()
-        assert 'color: #ff0000' in css
+    def test_to_tailwind_with_classes(self):
+        """Tailwind output includes user classes."""
+        style = ElementStyle(classes='text-center mt-4')
+        classes = style.to_tailwind()
+        assert 'text-center' in classes
+        assert 'mt-4' in classes
     
     def test_from_dict(self):
         """Create from dictionary."""
@@ -65,82 +66,110 @@ class TestElementStyle:
         assert style.color == '#ff0000'
         assert style.weight == 'bold'
         assert style.size == 24
-
-
-class TestLayoutStyle:
-    """Test LayoutStyle class."""
     
-    def test_create_empty_layout(self):
-        """Create empty layout style."""
-        layout = LayoutStyle()
-        assert layout.name == ''
-        assert layout.background == ''
+    def test_merge_other_takes_precedence(self):
+        """Merge styles with other taking precedence."""
+        base = ElementStyle(color='#ff0000', weight='normal')
+        override = ElementStyle(color='#00ff00')
+        merged = base.merge(override)
+        assert merged.color == '#00ff00'
+        assert merged.weight == 'normal'
+
+
+class TestSlideStyle:
+    """Test SlideStyle class."""
+    
+    def test_create_empty_style(self):
+        """Create empty slide style."""
+        style = SlideStyle()
+        assert style.name == ''
+        assert style.background == ''
     
     def test_create_with_background(self):
-        """Create layout with background."""
-        layout = LayoutStyle(
+        """Create style with background."""
+        style = SlideStyle(
             name='title',
             background='linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
         )
-        assert layout.name == 'title'
-        assert 'gradient' in layout.background
+        assert style.name == 'title'
+        assert 'gradient' in style.background
     
     def test_create_with_element_styles(self):
-        """Create layout with element styles."""
-        layout = LayoutStyle(
+        """Create style with element styles via kwargs."""
+        style = SlideStyle(
             name='content',
             title=ElementStyle(color='#111827', weight='bold'),
             subtitle=ElementStyle(color='#6b7280'),
             text=ElementStyle(color='#1f2937'),
         )
-        assert layout.title.color == '#111827'
-        assert layout.subtitle.color == '#6b7280'
-        assert layout.text.color == '#1f2937'
+        assert style.get('title').color == '#111827'
+        assert style.get('subtitle').color == '#6b7280'
+        assert style.get('text').color == '#1f2937'
     
     def test_background_style_gradient(self):
         """Generate background style for gradient."""
-        layout = LayoutStyle(
+        style = SlideStyle(
             background='linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
         )
-        style = layout.background_style()
-        assert 'background:' in style
-        assert 'gradient' in style
+        css = style.background_style()
+        assert 'background:' in css
+        assert 'gradient' in css
     
     def test_background_style_color(self):
         """Generate background style for solid color."""
-        layout = LayoutStyle(background='#ffffff')
-        style = layout.background_style()
-        assert 'background-color:' in style or 'background:' in style
+        style = SlideStyle(background='#ffffff')
+        css = style.background_style()
+        assert 'background-color:' in css or 'background:' in css
     
-    def test_to_tailwind_element(self):
-        """Get Tailwind classes for specific element."""
-        layout = LayoutStyle(
+    def test_get_element_style(self):
+        """Get ElementStyle by name."""
+        style = SlideStyle(
             title=ElementStyle(color='#ffffff', weight='bold'),
             text=ElementStyle(color='#cccccc'),
         )
         
-        title_classes = layout.to_tailwind('title')
-        text_classes = layout.to_tailwind('text')
+        title_style = style.get('title')
+        text_style = style.get('text')
         
-        assert 'text-[#ffffff]' in title_classes
-        assert 'font-bold' in title_classes
-        assert 'text-[#cccccc]' in text_classes
+        assert title_style.color == '#ffffff'
+        assert title_style.weight == 'bold'
+        assert text_style.color == '#cccccc'
     
-    def test_to_tailwind_unknown_element(self):
-        """Return empty for unknown element."""
-        layout = LayoutStyle()
-        classes = layout.to_tailwind('unknown')
-        assert classes == ''
+    def test_get_unknown_element_returns_empty(self):
+        """Get unknown element returns empty ElementStyle."""
+        style = SlideStyle()
+        unknown = style.get('unknown')
+        assert unknown.color == ''
     
-    def test_from_dict(self):
-        """Create from dictionary."""
-        layout = LayoutStyle.from_dict('title', {
-            'background': '#ffffff',
-            'title': {'color': '#111827', 'weight': 'bold'},
-            'text': {'color': '#1f2937'},
-        })
+    def test_set_element_style(self):
+        """Set ElementStyle by name."""
+        style = SlideStyle()
+        style.set('custom', ElementStyle(color='#ff0000'))
+        assert style.get('custom').color == '#ff0000'
+    
+    def test_to_css_element(self):
+        """Get CSS for specific element."""
+        style = SlideStyle(
+            title=ElementStyle(color='#ffffff', size=80),
+        )
+        css = style.to_css('title')
+        assert 'color: #ffffff' in css
+        assert 'font-size: 80px' in css
+    
+    def test_merge_styles(self):
+        """Merge two SlideStyles."""
+        base = SlideStyle(
+            name='base',
+            background='#000000',
+            title=ElementStyle(color='#ff0000', size=80),
+        )
+        override = SlideStyle(
+            name='override',
+            title=ElementStyle(color='#00ff00'),
+        )
+        merged = base.merge(override)
         
-        assert layout.name == 'title'
-        assert layout.background == '#ffffff'
-        assert layout.title.color == '#111827'
-        assert layout.text.color == '#1f2937'
+        assert merged.name == 'override'
+        assert merged.background == '#000000'  # From base
+        assert merged.get('title').color == '#00ff00'  # Overridden
+        assert merged.get('title').size == 80  # From base

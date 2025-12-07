@@ -22,5 +22,12 @@
     "text": "#e2e8f0",
     "text_muted": "#cbd5e1",
     "text_faint": "#94a3b8"
+  },
+
+  "slide": {
+    "background": "${bg}",
+    "title": { "color": "${heading}", "size": 80, "weight": "bold" },
+    "subtitle": { "color": "${text_faint}", "size": 40 },
+    "text": { "color": "${text}", "size": 32 }
   }
 }

@@ -16,16 +16,23 @@ function updateSlideScale() {
     const availableWidth = wrapperRect.width - padding;
     const availableHeight = wrapperRect.height - padding;
     
-    // Get slide dimensions from data attributes
+    // Get slide dimensions from data attributes (native resolution)
     const slideWidth = parseInt(frame.dataset.width) || 1920;
     const slideHeight = parseInt(frame.dataset.height) || 1080;
     
+    // Calculate uniform scale to fit while maintaining aspect ratio
     const scaleX = availableWidth / slideWidth;
     const scaleY = availableHeight / slideHeight;
     const maxScale = isFullscreen ? Infinity : 1;
     const scale = Math.min(scaleX, scaleY, maxScale);
     
+    // Force the frame to native dimensions and apply uniform scale
+    frame.style.width = slideWidth + 'px';
+    frame.style.height = slideHeight + 'px';
     frame.style.transform = `scale(${scale})`;
+    
+    // Show frame after scaling is applied (prevents FOUC)
+    frame.classList.add('scaled');
 }
 
 // Initialize scaling

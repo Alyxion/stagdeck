@@ -2,6 +2,8 @@
 
 This document describes how to run and write tests for StagDeck.
 
+> See also: [CODING_GUIDELINES.md](CODING_GUIDELINES.md) for general coding standards.
+
 ## Test Types
 
 StagDeck uses two types of tests:
@@ -36,7 +38,7 @@ addopts = "-p nicegui.testing.user_plugin"
 ## Running Tests
 
 ```bash
-# Run all tests
+# Run unit tests (default, fast)
 poetry run pytest
 
 # Run with verbose output
@@ -50,6 +52,35 @@ poetry run pytest tests/test_slide.py::TestSlideCreation
 
 # Run theme tests only
 poetry run pytest tests/theme/
+
+# Run integration tests (requires Chrome, slower)
+poetry run pytest -m integration
+
+# Run ALL tests including integration
+poetry run pytest -m ""
+```
+
+### Integration Tests
+
+Integration tests for render endpoints are **skipped by default** because they:
+- Start a real StagDeck server
+- Require Chrome/Chromium for headless rendering
+- Take significantly longer (~45 seconds)
+
+To run them:
+```bash
+poetry run pytest -m integration -v
+```
+
+**Requirements:**
+- Port 8080 must be free (no other server running)
+- Chrome or Chromium must be installed
+
+If port 8080 is in use, you'll see:
+```
+Failed: Port 8080 is already in use.
+Please stop any running server before running integration tests.
+Run: lsof -ti:8080 | xargs kill -9
 ```
 
 ## Test Structure
@@ -212,6 +243,89 @@ def sample_deck():
     deck.add(title='Slide 2', content='Content 2')
     return deck
 ```
+
+## Visual Testing with Render Endpoints
+
+When the app is running, use the `/render` endpoint to capture slide screenshots for visual verification.
+
+### Single Slide Rendering
+
+```bash
+# Render slide by index
+curl -o slide.png "http://localhost:8080/render?slide=0&step=0"
+
+# Render slide by name
+curl -o slide.png "http://localhost:8080/render?slide=slide_0&step=step_0"
+
+# Custom resolution
+curl -o slide_4k.png "http://localhost:8080/render?slide=0&width=3840&height=2160"
+
+# With longer render delay (for animations)
+curl -o slide.png "http://localhost:8080/render?slide=0&delay=3.0"
+```
+
+### Grid Rendering
+
+Render all slides as a grid for quick visual overview:
+
+```bash
+# Default grid (3 columns, 25% zoom)
+curl -o grid.png "http://localhost:8080/render/grid"
+
+# Custom columns and zoom
+curl -o grid.png "http://localhost:8080/render/grid?cols=4&zoom=0.5"
+
+# JPEG format with quality setting
+curl -o grid.jpg "http://localhost:8080/render/grid?format=jpg&quality=85"
+
+# Render specific step by name
+curl -o grid.png "http://localhost:8080/render/grid?steps=step_0&cols=4"
+```
+
+### Batch Rendering (ZIP)
+
+Render selected slides as individual images in an uncompressed ZIP:
+
+```bash
+# All slides at native resolution
+curl -o slides.zip "http://localhost:8080/render/batch"
+
+# Specific slides with zoom
+curl -o slides.zip "http://localhost:8080/render/batch?slides=0,1,2&zoom=0.5"
+
+# JPEG format for smaller file size
+curl -o slides.zip "http://localhost:8080/render/batch?format=jpg&quality=80"
+
+# All steps for specific slides
+curl -o slides.zip "http://localhost:8080/render/batch?slides=0,1&steps=all"
+
+# Specific step by name
+curl -o slides.zip "http://localhost:8080/render/batch?steps=step_0"
+```
+
+### Render Endpoint Parameters
+
+| Endpoint | Parameter | Default | Description |
+|----------|-----------|---------|-------------|
+| `/render` | `slide` | `0` | Slide index or name |
+| `/render` | `step` | `0` | Step index or name |
+| `/render` | `width` | `1920` | Image width (100-7680) |
+| `/render` | `height` | `1080` | Image height (100-4320) |
+| `/render` | `delay` | `2.0` | Render delay in seconds |
+| `/render` | `format` | `png` | Output format (`png` or `base64`) |
+| `/render/batch` | `slides` | `all` | Comma-separated indices/names or `all` |
+| `/render/batch` | `steps` | `first` | Step indices/names, `first`, or `all` |
+| `/render/batch` | `zoom` | `1.0` | Scale factor (0.1-1.0, 1.0 = native) |
+| `/render/batch` | `delay` | `1.0` | Render delay per slide |
+| `/render/batch` | `format` | `png` | Output format (`png` or `jpg`) |
+| `/render/batch` | `quality` | `90` | JPEG quality (1-100) |
+| `/render/grid` | `slides` | `all` | Comma-separated indices/names or `all` |
+| `/render/grid` | `steps` | `first` | Step indices/names, `first`, or `all` |
+| `/render/grid` | `cols` | `3` | Number of columns (1-10) |
+| `/render/grid` | `zoom` | `0.25` | Thumbnail scale (0.1-1.0) |
+| `/render/grid` | `delay` | `1.0` | Render delay per slide |
+| `/render/grid` | `format` | `png` | Output format (`png` or `jpg`) |
+| `/render/grid` | `quality` | `90` | JPEG quality (1-100) |
 
 ## Best Practices
 

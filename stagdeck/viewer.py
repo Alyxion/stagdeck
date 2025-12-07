@@ -183,8 +183,8 @@ class DeckViewer:
         # Get master layout if specified
         master_slide = self.deck.get_layout(slide.layout) if slide.layout else None
         
-        # Let the slide build itself (with optional master layer)
-        slide.build(step=self.current_step, master_slide=master_slide)
+        # Let the slide build itself (with optional master layer and deck for style cascade)
+        slide.build(step=self.current_step, master_slide=master_slide, deck=self.deck)
     
     # ⌨️ Event handlers
     
@@ -286,10 +286,10 @@ class DeckViewer:
         self._init_from_query_params()
         self._setup_static_assets()
         
-        ui.query('.nicegui-content').classes('p-0 h-screen')
+        ui.query('.nicegui-content').classes('p-0')
         
-        with ui.column().classes('w-full h-screen'):
-            with ui.element('div').classes('slide-wrapper flex-grow'):
+        with ui.column().classes('w-full h-screen overflow-hidden').style('height: 100vh; height: 100dvh;'):
+            with ui.element('div').classes('slide-wrapper').style('flex: 1 1 0; min-height: 0; height: 100%;'):
                 with ui.element('div').classes('slide-scaler'):
                     self._slide_frame = (
                         ui.element('div')
@@ -311,61 +311,23 @@ class DeckViewer:
         ui.keyboard(on_key=self._handle_key)
         self._update_view()
     
-    # =========================================================================
-    # 🚀 App Entry Points
-    # =========================================================================
-    
-    @classmethod
-    def run(
-        cls,
-        deck: SlideDeck,
-        title: str | None = None,
-        path: str = '/',
-        **kwargs,
-    ) -> None:
-        """🚀 Run the presentation app.
+    def build_render_frame(self) -> None:
+        """📸 Build just the slide frame for rendering (no navbar, no scaling).
         
-        Creates a page at the specified path and starts the NiceGUI server.
-        
-        :param deck: SlideDeck to present.
-        :param title: Browser window title (defaults to deck title).
-        :param path: URL path for the presentation (default: '/').
-        :param kwargs: Additional arguments passed to ui.run().
-        
-        Example:
-            >>> deck = SlideDeck(title='My Talk')
-            >>> deck.add(title='Hello', content='World')
-            >>> DeckViewer.run(deck)
+        Used by the render endpoint to capture clean slide images.
+        Always renders at deck's native resolution for consistent output.
         """
-        window_title = title or deck.title
+        self._init_from_query_params()
         
-        @ui.page(path)
-        def presentation_page():
-            viewer = cls(deck=deck)
-            viewer.build()
+        # No padding, exact slide dimensions
+        ui.query('.nicegui-content').classes('p-0 m-0')
+        ui.query('body').style('margin: 0; padding: 0; overflow: hidden;')
         
-        ui.run(title=window_title, show=kwargs.pop('show', False), **kwargs)
-    
-    @classmethod
-    def create_page(
-        cls,
-        deck: SlideDeck,
-        path: str = '/',
-    ) -> None:
-        """📄 Register a presentation page without starting the server.
+        # Slide frame at deck's native dimensions (never override)
+        self._slide_frame = (
+            ui.element('div')
+            .classes('slide-frame')
+            .style(f'width: {self.deck.width}px; height: {self.deck.height}px;')
+        )
         
-        Use this when you need custom routes or multiple presentations.
-        Call ui.run() separately after setting up all pages.
-        
-        :param deck: SlideDeck to present.
-        :param path: URL path for the presentation.
-        
-        Example:
-            >>> DeckViewer.create_page(deck1, path='/')
-            >>> DeckViewer.create_page(deck2, path='/backup')
-            >>> ui.run()
-        """
-        @ui.page(path)
-        def presentation_page():
-            viewer = cls(deck=deck)
-            viewer.build()
+        self._update_view()

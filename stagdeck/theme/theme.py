@@ -123,18 +123,15 @@ class Theme:
     
     def _layout_to_dict(self, layout: LayoutStyle) -> dict[str, Any]:
         """Convert LayoutStyle to dictionary."""
-        return {
-            'background': layout.background,
-            'title': self._element_to_dict(layout.title),
-            'subtitle': self._element_to_dict(layout.subtitle),
-            'text': self._element_to_dict(layout.text),
-            'heading': self._element_to_dict(layout.heading),
-            'link': self._element_to_dict(layout.link),
-            'code_bg': layout.code_bg,
-            'code_text': self._element_to_dict(layout.code_text),
-            'bullet': self._element_to_dict(layout.bullet),
-            'accent': layout.accent,
-        }
+        result = {'background': layout.background}
+        
+        # Export all elements from the layout
+        for name in ['title', 'subtitle', 'text', 'heading', 'link', 'bullet']:
+            elem = layout.get(name)
+            if elem and (elem.color or elem.size or elem.weight):
+                result[name] = self._element_to_dict(elem)
+        
+        return result
     
     def _element_to_dict(self, element: ElementStyle) -> dict[str, Any]:
         """Convert ElementStyle to dictionary."""
@@ -151,8 +148,8 @@ class Theme:
             result['font'] = element.font
         if element.classes:
             result['classes'] = element.classes
-        if element.style:
-            result['style'] = element.style
+        if element.css:
+            result['css'] = element.css
         return result
     
     # =========================================================================
@@ -319,19 +316,17 @@ class Theme:
         if not layout:
             return None
         
-        # Resolve all string values in layout
+        # Resolve all string values in layout elements
+        resolved_elements: dict[str, ElementStyle] = {}
+        for elem_name in ['title', 'subtitle', 'text', 'heading', 'link', 'bullet']:
+            elem = layout.get(elem_name)
+            if elem:
+                resolved_elements[elem_name] = self._resolve_element(elem)
+        
         resolved = LayoutStyle(
             name=layout.name,
             background=self._resolve_str(layout.background),
-            title=self._resolve_element(layout.title),
-            subtitle=self._resolve_element(layout.subtitle),
-            text=self._resolve_element(layout.text),
-            heading=self._resolve_element(layout.heading),
-            link=self._resolve_element(layout.link),
-            code_bg=self._resolve_str(layout.code_bg),
-            code_text=self._resolve_element(layout.code_text),
-            bullet=self._resolve_element(layout.bullet),
-            accent=self._resolve_str(layout.accent),
+            elements=resolved_elements,
         )
         
         self._cache.set_layout(cache_key, resolved)
@@ -353,7 +348,7 @@ class Theme:
             opacity=element.opacity,
             font=self._resolve_str(element.font),
             classes=self._resolve_str(element.classes),
-            style=self._resolve_str(element.style),
+            css=self._resolve_str(element.css),
         )
     
     # =========================================================================
@@ -396,60 +391,3 @@ class Theme:
         return self._cache.stats()
 
 
-# =============================================================================
-# Default Theme
-# =============================================================================
-
-DEFAULT_THEME = Theme.from_dict({
-    'name': 'default',
-    'version': '1.0',
-    'variables': {
-        'primary': '#667eea',
-        'secondary': '#764ba2',
-        'accent': '#f5576c',
-        'text_dark': '#1a1a2e',
-        'text_light': '#ffffff',
-        'text_muted': '#6b7280',
-        'text_muted_light': '#d1d5db',
-        'spacing_base': 16,
-        'font_size_base': 16,
-    },
-    'computed': {
-        'primary_gradient': 'linear-gradient(135deg, ${primary} 0%, ${secondary} 100%)',
-        'accent_gradient': 'linear-gradient(135deg, #f093fb 0%, ${accent} 100%)',
-        'spacing_sm': '${spacing_base} * 0.5',
-        'spacing_lg': '${spacing_base} * 2',
-        'spacing_xl': '${spacing_base} * 3',
-        'font_size_sm': '${font_size_base} * 0.875',
-        'font_size_lg': '${font_size_base} * 1.25',
-        'font_size_xl': '${font_size_base} * 1.5',
-        'font_size_2xl': '${font_size_base} * 2',
-        'font_size_3xl': '${font_size_base} * 2.5',
-        'font_size_6xl': '${font_size_base} * 4',
-    },
-    'layouts': {
-        'title': {
-            'background': '${primary_gradient}',
-            'title': {'color': '${text_light}', 'weight': 'bold'},
-            'subtitle': {'color': '${text_light}', 'opacity': 0.8},
-            'text': {'color': '${text_light}'},
-            'accent': '${accent}',
-        },
-        'content': {
-            'background': '#f8fafc',
-            'title': {'color': '${text_dark}', 'weight': 'bold'},
-            'subtitle': {'color': '${text_muted}'},
-            'text': {'color': '${text_dark}'},
-            'link': {'color': '${primary}'},
-            'accent': '${accent}',
-        },
-        'code': {
-            'background': '${accent_gradient}',
-            'title': {'color': '${text_light}', 'weight': 'bold'},
-            'subtitle': {'color': '${text_light}', 'opacity': 0.8},
-            'text': {'color': '${text_light}'},
-            'code_bg': 'rgba(0,0,0,0.2)',
-            'code_text': {'color': '${text_light}'},
-        },
-    },
-})

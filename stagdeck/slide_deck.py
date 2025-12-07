@@ -23,6 +23,7 @@ class SlideDeck:
     :ivar height: Slide height in pixels (default 1080).
     :ivar default_background: Default background style for all slides.
     :ivar default_layout: Default layout name from master deck.
+    :ivar default_style: Default LayoutStyle for all slides (cascade fallback).
     :ivar default_step_duration: Default duration in seconds for each step.
     :ivar default_transition_duration: Default transition animation duration in seconds.
     :ivar theme_context: Theme context for cascading theme resolution.
@@ -34,6 +35,7 @@ class SlideDeck:
     height: int = 1080
     default_background: str = ''
     default_layout: str = ''
+    default_style: 'LayoutStyle | None' = None
     default_step_duration: float = 5.0
     default_transition_duration: float = 0.5
     theme_context: 'ThemeContext | None' = None
@@ -82,6 +84,7 @@ class SlideDeck:
         step_names: list[str] | None = None,
         step_durations: list[float] | None = None,
         transition_duration: float | None = None,
+        **kwargs,
     ) -> 'SlideDeck':
         """➕ Convenience method to create and add a slide.
         
@@ -99,10 +102,21 @@ class SlideDeck:
         :param step_names: Names for each step.
         :param step_durations: Duration for each step.
         :param transition_duration: Transition animation duration.
+        :param kwargs: Additional data for layout elements (e.g., body, left, right, image).
         :return: Self for chaining.
         """
         slide_name = name if name else f'slide_{len(self.slides)}'
         slide_layout = layout if layout else self.default_layout
+        
+        # Build data dict from explicit params and kwargs
+        data = dict(kwargs)
+        if title:
+            data['title'] = title
+        if subtitle:
+            data['subtitle'] = subtitle
+        if content:
+            data['body'] = content  # Map content to body for layouts
+        
         self.slides.append(Slide(
             name=slide_name,
             layout=slide_layout,
@@ -118,6 +132,7 @@ class SlideDeck:
             step_names=step_names,
             step_durations=step_durations,
             transition_duration=transition_duration if transition_duration is not None else self.default_transition_duration,
+            data=data,
         ))
         return self
     
