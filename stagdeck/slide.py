@@ -16,6 +16,9 @@ class Slide:
     :ivar layout: Name of the master layout to use (renders as base layer).
     :ivar title: The slide title displayed at the top.
     :ivar content: Main content - can be plain text or markdown.
+    :ivar final_content: Content used for layout sizing (for animation stability).
+                        If None, uses content. This ensures progressive reveals
+                        don't cause layout shifts.
     :ivar subtitle: Optional subtitle below the title.
     :ivar notes: Speaker notes (not displayed during presentation).
     :ivar builder: Optional custom builder function for complex layouts.
@@ -32,6 +35,7 @@ class Slide:
     layout: str = ''
     title: str = ''
     content: str = ''
+    final_content: str | None = None  # For animation-stable sizing
     subtitle: str = ''
     notes: str = ''
     builder: Callable[[int], None] | Callable[[], None] | None = None
@@ -43,6 +47,10 @@ class Slide:
     step_durations: list[float] | None = None
     transition_duration: float = 0.0
     data: dict[str, Any] = field(default_factory=dict)  # Parsed/resolved content for elements
+    
+    def get_sizing_content(self) -> str:
+        """Get content used for layout sizing (final_content or content)."""
+        return self.final_content if self.final_content is not None else self.content
     
     def has_custom_builder(self) -> bool:
         """🔧 Check if slide uses a custom builder function."""
@@ -185,32 +193,25 @@ class Slide:
         master_slide: 'Slide | None' = None,
         deck: 'SlideDeck | None' = None,
     ) -> None:
-        """🖼️ Build default slide content (title, subtitle, content)."""
-        from nicegui import ui
+        """🖼️ Build default slide content with automatic layout scaling.
+        
+        Uses the layout system from components.slide_layout which:
+        - Maximizes space usage
+        - Provides consistent sizing across slides
+        - Supports animation-stable layouts via final_content
+        """
+        from .components.slide_layout import build_slide_layout
         
         # Get style from theme (cascade: slide → master → deck → default)
         style = self.get_style(master_slide, deck)
         
-        # Background style
-        bg_style = ''
-        if self.background_color:
-            if 'gradient' in self.background_color or self.background_color.startswith('radial') or self.background_color.startswith('linear'):
-                bg_style = f'background: {self.background_color};'
-            else:
-                bg_style = f'background-color: {self.background_color};'
-        
-        with ui.element('div').classes('w-full h-full').style(bg_style):
-            # Use styles from theme (includes default sizes for 1920x1080)
-            with ui.column().classes(f'w-full h-full items-center justify-center p-16 {style.to_tailwind("text")}').style('gap: 2rem;'):
-                if self.title:
-                    title_css = style.to_css('title') or 'font-size: 5rem;'
-                    ui.label(self.title).classes(f'text-center {style.to_tailwind("title")}').style(f'{title_css}; line-height: 1.1;')
-                if self.subtitle:
-                    subtitle_css = style.to_css('subtitle') or 'font-size: 2.5rem;'
-                    ui.label(self.subtitle).classes(f'text-center {style.to_tailwind("subtitle")}').style(f'{subtitle_css}; line-height: 1.3;')
-                if self.content:
-                    text_css = style.to_css('text') or 'font-size: 2rem;'
-                    ui.markdown(self.content).classes(f'text-center max-w-6xl {style.to_tailwind("text")}').style(f'{text_css}; line-height: 1.6;')
+        # Build with automatic layout detection and scaling
+        build_slide_layout(
+            slide=self,
+            step=step,
+            style=style,
+            final_content=self.get_sizing_content(),
+        )
     
     def get_step_name(self, step: int) -> str:
         """🏷️ Get name for a specific step.

@@ -58,39 +58,163 @@
 }
 
 /* ==========================================================================
+   Slide Layout System
+   ========================================================================== */
+
+.slide-layout {
+    /* Ensure layout fills the frame */
+    box-sizing: border-box;
+}
+
+/* Content container - fills available space */
+.slide-content {
+    /* Allow content to fill and scale */
+    height: 100%;
+}
+
+/* ==========================================================================
    Markdown Styles (for 1920x1080 slides)
    ========================================================================== */
 
-/* Markdown content inherits font-size from parent, but lists need left-align */
+/* Markdown content inherits font-size from parent */
+.nicegui-markdown {
+    /* Inherit font size for consistent scaling */
+    font-size: inherit;
+    line-height: inherit;
+}
+
+/* Lists - left aligned with proper spacing */
 .nicegui-markdown ul,
 .nicegui-markdown ol {
     text-align: left;
-    padding-left: 2em;
+    padding-left: 1.5em;
+    margin: 0.5em 0;
 }
 
 .nicegui-markdown li {
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.5em;
 }
 
+/* Nested lists */
+.nicegui-markdown ul ul,
+.nicegui-markdown ol ol,
+.nicegui-markdown ul ol,
+.nicegui-markdown ol ul {
+    margin-top: 0.3em;
+    margin-bottom: 0.3em;
+}
+
+/* Inline code */
 .nicegui-markdown code {
-    font-size: 0.9em;
-    padding: 0.2em 0.4em;
-    background: rgba(0, 0, 0, 0.2);
+    font-size: 0.85em;
+    padding: 0.15em 0.4em;
+    background: rgba(0, 0, 0, 0.15);
     border-radius: 4px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
 }
 
+/* Code blocks */
 .nicegui-markdown pre {
     text-align: left;
-    padding: 1.5rem;
-    background: rgba(0, 0, 0, 0.3);
+    padding: 1.2em 1.5em;
+    background: rgba(0, 0, 0, 0.25);
     border-radius: 8px;
     overflow-x: auto;
+    margin: 1em 0;
 }
 
 .nicegui-markdown pre code {
     background: none;
     padding: 0;
-    font-size: 1.5rem;
+    font-size: 0.75em;  /* Relative to parent */
+    line-height: 1.5;
+}
+
+/* Tables - scale to fill available space */
+.nicegui-markdown table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0;
+    table-layout: fixed;
+    font-size: inherit !important;
+}
+
+.nicegui-markdown th,
+.nicegui-markdown td {
+    padding: 0.4em 0.6em;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    text-align: left;
+    vertical-align: middle;
+}
+
+.nicegui-markdown th {
+    background: rgba(255, 255, 255, 0.1);
+    font-weight: 600;
+}
+
+.nicegui-markdown tr:nth-child(even) {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+/* Table content styling - simple approach, no complex flexbox */
+.slide-content {
+    overflow: visible;
+}
+
+.slide-content .nicegui-markdown {
+    overflow: visible;
+}
+
+/* Tables use standard layout - scaling is handled by font-size */
+.slide-content table {
+    width: 100%;
+}
+
+/* Blockquotes */
+.nicegui-markdown blockquote {
+    border-left: 4px solid rgba(255, 255, 255, 0.3);
+    padding-left: 1.5em;
+    margin: 1em 0;
+    font-style: italic;
+    opacity: 0.9;
+}
+
+/* Images - responsive within content */
+.nicegui-markdown img {
+    max-width: 100%;
+    max-height: 60vh;
+    height: auto;
+    border-radius: 8px;
+    margin: 1em auto;
+    display: block;
+}
+
+/* Paragraphs */
+.nicegui-markdown p {
+    margin: 0.5em 0;
+}
+
+/* Strong/Bold */
+.nicegui-markdown strong {
+    font-weight: 700;
+}
+
+/* Emphasis/Italic */
+.nicegui-markdown em {
+    font-style: italic;
+}
+
+/* Headings within content (h2, h3, etc.) */
+.nicegui-markdown h2 {
+    font-size: 1.4em;
+    font-weight: 600;
+    margin: 1em 0 0.5em 0;
+}
+
+.nicegui-markdown h3 {
+    font-size: 1.2em;
+    font-weight: 600;
+    margin: 0.8em 0 0.4em 0;
 }
 
 /* ==========================================================================

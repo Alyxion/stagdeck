@@ -318,15 +318,17 @@ class DeckViewer:
         Always renders at deck's native resolution for consistent output.
         """
         self._init_from_query_params()
+        self._setup_static_assets()  # Load CSS for proper styling
         
         # No padding, exact slide dimensions
         ui.query('.nicegui-content').classes('p-0 m-0')
         ui.query('body').style('margin: 0; padding: 0; overflow: hidden;')
         
         # Slide frame at deck's native dimensions (never override)
+        # Add 'scaled' class immediately since we don't use JS scaling for render
         self._slide_frame = (
             ui.element('div')
-            .classes('slide-frame')
+            .classes('slide-frame scaled')
             .style(f'width: {self.deck.width}px; height: {self.deck.height}px;')
         )
         
