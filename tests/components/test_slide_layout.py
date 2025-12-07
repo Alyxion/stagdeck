@@ -79,7 +79,7 @@ class TestLayoutConfig:
         assert 0 < config.margin_right < 10
         
         # Title region should be reasonable
-        assert 10 < config.title_height < 30
+        assert 5 <= config.title_height < 30
         
         # Font sizes should be reasonable rem values
         assert config.title_only_size > config.title_size

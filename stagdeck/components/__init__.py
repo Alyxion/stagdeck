@@ -22,6 +22,18 @@ from .slide_layout import (
 )
 
 from .content_elements import (
+    # Classes
+    ContentElement,
+    ContentStyle,
+    TableElement,
+    BulletListElement,
+    NumberedListElement,
+    CodeBlockElement,
+    BlockquoteElement,
+    ParagraphElement,
+    MixedContentElement,
+    REM_TO_PX_FACTOR,
+    # Convenience functions
     render_table,
     render_bullet_list,
     render_numbered_list,
@@ -46,7 +58,18 @@ __all__ = [
     'analyze_content',
     'calculate_content_scale',
     'DEFAULT_CONFIG',
-    # Content Elements
+    # Content Element Classes
+    'ContentElement',
+    'ContentStyle',
+    'TableElement',
+    'BulletListElement',
+    'NumberedListElement',
+    'CodeBlockElement',
+    'BlockquoteElement',
+    'ParagraphElement',
+    'MixedContentElement',
+    'REM_TO_PX_FACTOR',
+    # Content Element Functions
     'render_table',
     'render_bullet_list',
     'render_numbered_list',

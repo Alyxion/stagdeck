@@ -497,11 +497,11 @@ def _render_content(
     :param is_full_page: Whether content should fill the entire page.
     """
     from .content_elements import (
-        render_table,
-        render_bullet_list,
-        render_code_block,
-        render_blockquote,
-        render_mixed_content,
+        TableElement,
+        BulletListElement,
+        CodeBlockElement,
+        MixedContentElement,
+        REM_TO_PX_FACTOR,
     )
     
     if not content:
@@ -519,14 +519,30 @@ def _render_content(
     text_css = style.to_css('text') or ''
     container_classes = f'w-full {style.to_tailwind("text")}'
     
+    # Convert to px for consistent sizing
+    px_size = font_size * REM_TO_PX_FACTOR
+    
     with ui.element('div').classes(container_classes).style(text_css):
         # Route to appropriate renderer based on content type
+        # Use inline rendering (not async build) for synchronous layout
         if metrics.content_type == 'table':
-            render_table(content, font_size=font_size)
+            with ui.element('div').classes('w-full').style(
+                f'font-size: {px_size}px; line-height: 1.4;'
+            ):
+                ui.markdown(content).classes('w-full')
         elif metrics.content_type == 'bullets':
-            render_bullet_list(content, font_size=font_size)
+            with ui.element('div').classes('w-full').style(
+                f'font-size: {px_size}px; line-height: 1.5;'
+            ):
+                ui.markdown(content)
         elif metrics.content_type == 'code':
-            render_code_block(content, font_size=font_size)
+            with ui.element('div').classes('w-full').style(
+                f'font-size: {px_size}px; line-height: 1.5;'
+            ):
+                ui.markdown(content)
         else:
             # Mixed or plain text content
-            render_mixed_content(content, font_size=font_size)
+            with ui.element('div').classes('w-full').style(
+                f'font-size: {px_size}px; line-height: 1.5;'
+            ):
+                ui.markdown(content)
