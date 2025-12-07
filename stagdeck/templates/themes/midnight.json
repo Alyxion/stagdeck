@@ -1,0 +1,26 @@
+{
+  "name": "midnight",
+  "version": "1.0",
+  "extends": "aurora.json",
+
+  "palette": {
+    "bg": "#0f172a",
+    "bg_alt": "#1e293b",
+    "bg_muted": "#334155",
+    "bg_inverse": "#f8fafc",
+
+    "fg": "#e2e8f0",
+    "fg_muted": "#94a3b8",
+    "fg_faint": "#64748b",
+    "fg_inverse": "#0f172a",
+
+    "border": "#334155",
+    "border_muted": "#1e293b",
+    "border_strong": "#475569",
+
+    "heading": "#f8fafc",
+    "text": "#e2e8f0",
+    "text_muted": "#cbd5e1",
+    "text_faint": "#94a3b8"
+  }
+}

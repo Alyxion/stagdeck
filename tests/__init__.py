@@ -1,0 +1,1 @@
+"""StagDeck test suite."""

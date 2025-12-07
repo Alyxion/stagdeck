@@ -1,0 +1,247 @@
+{
+  "name": "aurora",
+  "version": "1.0",
+
+  "constants": {
+    "spacing_base": 16,
+    "font_size_base": 16,
+    "border_radius": 8,
+    "border_width": 1
+  },
+
+  "palette": {
+    "primary": "#667eea",
+    "secondary": "#764ba2",
+    "accent": "#f5576c",
+    "success": "#10b981",
+    "warning": "#f59e0b",
+    "error": "#ef4444",
+    "info": "#3b82f6",
+
+    "bg": "#ffffff",
+    "bg_alt": "#f9fafb",
+    "bg_muted": "#f3f4f6",
+    "bg_inverse": "#111827",
+
+    "fg": "#1f2937",
+    "fg_muted": "#6b7280",
+    "fg_faint": "#9ca3af",
+    "fg_inverse": "#ffffff",
+
+    "border": "#e5e7eb",
+    "border_muted": "#f3f4f6",
+    "border_strong": "#d1d5db",
+
+    "heading": "#111827",
+    "text": "#1f2937",
+    "text_muted": "#4b5563",
+    "text_faint": "#6b7280",
+
+    "chart_1": "#667eea",
+    "chart_2": "#f5576c",
+    "chart_3": "#10b981",
+    "chart_4": "#f59e0b",
+    "chart_5": "#8b5cf6",
+    "chart_6": "#06b6d4",
+    "chart_7": "#ec4899",
+    "chart_8": "#84cc16"
+  },
+
+  "text": {
+    "h1": { "color": "${heading}", "size": 60, "weight": "bold" },
+    "h2": { "color": "${heading}", "size": 48, "weight": "bold" },
+    "h3": { "color": "${heading}", "size": 36, "weight": "semibold" },
+    "h4": { "color": "${heading}", "size": 30, "weight": "semibold" },
+    "h5": { "color": "${fg}", "size": 24, "weight": "semibold" },
+    "h6": { "color": "${fg}", "size": 20, "weight": "semibold" },
+    "subtitle": { "color": "${text_faint}", "size": 30 },
+    "body": { "color": "${text}", "size": 20 },
+    "body_small": { "color": "${text_muted}", "size": 16 },
+    "body_large": { "color": "${text}", "size": 24 },
+    "caption": { "color": "${text_faint}", "size": 14 },
+    "footnote": { "color": "${text_faint}", "size": 12 },
+    "label": { "color": "${text_muted}", "size": 14, "weight": "medium" },
+    "quote": { "color": "${text}", "size": 24, "style": "italic", "border_color": "${primary}", "border_width": 4 },
+    "code_inline": { "color": "${accent}", "bg": "${bg_muted}", "size": 16 },
+    "link": { "color": "${primary}", "hover": "${secondary}" }
+  },
+
+  "list": {
+    "bullet": { "marker": "${primary}", "text": "${text}", "size": 20 },
+    "bullet_l2": { "marker": "${fg_faint}", "text": "${text}", "size": 18 },
+    "bullet_l3": { "marker": "${border_strong}", "text": "${text_muted}", "size": 16 },
+    "numbered": { "number": "${primary}", "text": "${text}", "size": 20 },
+    "checklist": { "checked": "${success}", "unchecked": "${fg_faint}", "text": "${text}" },
+    "definition": { "term": "${heading}", "term_weight": "semibold", "description": "${text}" }
+  },
+
+  "container": {
+    "card": { "bg": "${bg_alt}", "border": "${border}", "radius": 8, "shadow": "0 1px 3px rgba(0,0,0,0.1)" },
+    "panel": { "bg": "${bg_alt}", "radius": 8 },
+    "callout_info": { "bg": "rgba(59,130,246,0.1)", "border": "${info}", "icon": "${info}", "text": "${text}" },
+    "callout_success": { "bg": "rgba(16,185,129,0.1)", "border": "${success}", "icon": "${success}", "text": "${text}" },
+    "callout_warning": { "bg": "rgba(245,158,11,0.1)", "border": "${warning}", "icon": "${warning}", "text": "${text}" },
+    "callout_error": { "bg": "rgba(239,68,68,0.1)", "border": "${error}", "icon": "${error}", "text": "${text}" },
+    "tooltip": { "bg": "${bg_inverse}", "text": "${fg_inverse}", "radius": 4 }
+  },
+
+  "divider": {
+    "default": { "color": "${border}", "width": 1 },
+    "accent": { "color": "${primary}", "width": 4 }
+  },
+
+  "table": {
+    "header": { "bg": "${bg_muted}", "text": "${heading}", "weight": "semibold", "border": "${border}" },
+    "cell": { "bg": "${bg}", "text": "${text}", "border": "${border}" },
+    "row_alt": { "bg": "${bg_alt}" },
+    "row_hover": { "bg": "${bg_muted}" },
+    "highlight": { "bg": "rgba(102,126,234,0.1)" }
+  },
+
+  "code": {
+    "block": { "bg": "${bg_muted}", "text": "${text}", "border": "${border}", "radius": 8 },
+    "terminal": { "bg": "${bg_inverse}", "text": "${fg_inverse}", "prompt": "${success}", "radius": 8 },
+    "syntax": {
+      "keyword": "#8b5cf6",
+      "string": "#10b981",
+      "number": "#f59e0b",
+      "comment": "#9ca3af",
+      "function": "#3b82f6",
+      "variable": "#667eea",
+      "operator": "#ef4444",
+      "type": "#06b6d4"
+    }
+  },
+
+  "button": {
+    "primary": { "bg": "${primary}", "text": "${fg_inverse}", "hover": "${secondary}", "radius": 8 },
+    "secondary": { "bg": "${bg_muted}", "text": "${text}", "border": "${border_strong}", "hover": "${border}" },
+    "ghost": { "bg": "transparent", "text": "${primary}", "hover": "rgba(102,126,234,0.1)" },
+    "danger": { "bg": "${error}", "text": "${fg_inverse}", "hover": "#dc2626" }
+  },
+
+  "input": {
+    "default": { "bg": "${bg}", "text": "${text}", "border": "${border_strong}", "focus": "${primary}", "placeholder": "${fg_faint}", "radius": 8 }
+  },
+
+  "badge": {
+    "default": { "bg": "${bg_muted}", "text": "${text}", "radius": 4 },
+    "primary": { "bg": "${primary}", "text": "${fg_inverse}" },
+    "success": { "bg": "${success}", "text": "${fg_inverse}" },
+    "warning": { "bg": "${warning}", "text": "${fg_inverse}" },
+    "error": { "bg": "${error}", "text": "${fg_inverse}" }
+  },
+
+  "icon": {
+    "default": { "color": "${fg_muted}", "size": 24 },
+    "primary": { "color": "${primary}" },
+    "accent": { "color": "${accent}" }
+  },
+
+  "progress": {
+    "bar": { "track": "${border}", "fill": "${primary}", "height": 8, "radius": 4 },
+    "ring": { "track": "${border}", "fill": "${primary}", "width": 8 }
+  },
+
+  "stat": {
+    "number": { "color": "${accent}", "size": 72, "weight": "bold" },
+    "label": { "color": "${text_faint}", "size": 16 }
+  },
+
+  "timeline": {
+    "line": { "color": "${primary}", "width": 2 },
+    "dot": { "color": "${primary}", "size": 12 },
+    "text": { "color": "${text}" }
+  },
+
+  "connector": {
+    "default": { "stroke": "${fg_faint}", "width": 2, "arrow_size": 10 },
+    "emphasis": { "stroke": "${primary}", "width": 3 },
+    "subtle": { "stroke": "${border_strong}", "width": 1 },
+    "negative": { "stroke": "${error}", "width": 2 }
+  },
+
+  "arrow": {
+    "default": { "stroke": "${fg_faint}", "fill": "${fg_faint}", "width": 2 },
+    "primary": { "stroke": "${primary}", "fill": "${primary}" }
+  },
+
+  "bracket": {
+    "default": { "stroke": "${fg_faint}", "width": 2 }
+  },
+
+  "flowchart": {
+    "node": { "bg": "${bg_alt}", "border": "${border_strong}", "text": "${text}", "radius": 8 },
+    "decision": { "bg": "${bg_alt}", "border": "${primary}", "text": "${text}" },
+    "start_end": { "bg": "${primary}", "text": "${fg_inverse}", "radius": 24 },
+    "connector": { "stroke": "${fg_faint}", "width": 2 }
+  },
+
+  "pie_chart": {
+    "colors": ["${chart_1}", "${chart_2}", "${chart_3}", "${chart_4}", "${chart_5}", "${chart_6}", "${chart_7}", "${chart_8}"],
+    "stroke": "${bg}",
+    "stroke_width": 2,
+    "label": { "color": "${text}", "size": 14 }
+  },
+
+  "bar_chart": {
+    "colors": ["${chart_1}", "${chart_2}", "${chart_3}", "${chart_4}", "${chart_5}", "${chart_6}", "${chart_7}", "${chart_8}"],
+    "axis": { "color": "${fg_faint}", "width": 1 },
+    "grid": { "color": "${border}", "width": 1 },
+    "label": { "color": "${text_muted}", "size": 12 },
+    "title": { "color": "${text}", "size": 16, "weight": "semibold" }
+  },
+
+  "line_chart": {
+    "colors": ["${chart_1}", "${chart_2}", "${chart_3}", "${chart_4}", "${chart_5}", "${chart_6}", "${chart_7}", "${chart_8}"],
+    "line_width": 2,
+    "dot_size": 4,
+    "axis": { "color": "${fg_faint}", "width": 1 },
+    "grid": { "color": "${border}", "width": 1 },
+    "label": { "color": "${text_muted}", "size": 12 }
+  },
+
+  "area_chart": {
+    "colors": ["${chart_1}", "${chart_2}", "${chart_3}", "${chart_4}"],
+    "opacity": 0.3,
+    "line_width": 2,
+    "axis": { "color": "${fg_faint}" },
+    "grid": { "color": "${border}" }
+  },
+
+  "donut_chart": {
+    "colors": ["${chart_1}", "${chart_2}", "${chart_3}", "${chart_4}", "${chart_5}", "${chart_6}", "${chart_7}", "${chart_8}"],
+    "stroke": "${bg}",
+    "stroke_width": 2,
+    "inner_radius": 0.6,
+    "center_label": { "color": "${text}", "size": 24, "weight": "bold" }
+  },
+
+  "radar_chart": {
+    "colors": ["${chart_1}", "${chart_2}", "${chart_3}"],
+    "fill_opacity": 0.2,
+    "line_width": 2,
+    "grid": { "color": "${border_strong}" },
+    "label": { "color": "${text_muted}", "size": 12 }
+  },
+
+  "gauge": {
+    "track": "${border}",
+    "fill": "${primary}",
+    "width": 12,
+    "label": { "color": "${text}", "size": 32, "weight": "bold" }
+  },
+
+  "annotation": {
+    "step_number": { "bg": "${primary}", "text": "${fg_inverse}", "size": 32, "font_size": 18, "weight": "bold" },
+    "highlight": { "bg": "rgba(245,87,108,0.3)" },
+    "arrow": { "stroke": "${accent}", "width": 2 }
+  },
+
+  "slide": {
+    "background": "${bg}",
+    "title": { "color": "${heading}", "size": 60, "weight": "bold" },
+    "subtitle": { "color": "${text_faint}", "size": 30 },
+    "text": { "color": "${text}", "size": 20 }
+  }
+}
