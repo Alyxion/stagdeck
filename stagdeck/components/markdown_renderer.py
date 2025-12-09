@@ -11,6 +11,8 @@ from typing import Any
 
 from nicegui import ui
 
+from .content_elements import ImageView
+
 
 class BlockType(Enum):
     """Types of markdown blocks."""
@@ -184,12 +186,15 @@ def render_markdown_blocks(
     content: str,
     font_size: float = 1.8,
     table_scale: float = 1.0,
+    inline_image_max_height: str = '60%',
 ) -> None:
     """Render markdown content as separate NiceGUI components.
     
     :param content: Raw markdown content.
     :param font_size: Base font size in rem.
     :param table_scale: Additional scale factor for tables.
+    :param inline_image_max_height: Max height for inline images (CSS value).
+        Default '60%' adapts to parent container for any layout.
     """
     blocks = parse_markdown_blocks(content)
     
@@ -207,7 +212,7 @@ def render_markdown_blocks(
         elif block.type == BlockType.HEADING:
             _render_heading(block, font_size)
         elif block.type == BlockType.IMAGE:
-            _render_image(block)
+            _render_image(block, max_height=inline_image_max_height)
         else:
             _render_paragraph(block, font_size)
 
@@ -326,15 +331,16 @@ def _render_heading(block: MarkdownBlock, font_size: float) -> None:
         _html(_inline_markdown(block.content))
 
 
-def _render_image(block: MarkdownBlock) -> None:
-    """Render an image."""
-    ui.image(block.content).style(
-        'max-width: 100%; '
-        'max-height: 50vh; '
-        'border-radius: 8px; '
-        'margin: 0.5em auto; '
-        'display: block;'
-    )
+def _render_image(block: MarkdownBlock, max_height: str = '60%') -> None:
+    """Render an inline image using ImageView.
+    
+    :param block: The markdown block containing image source.
+    :param max_height: Maximum height CSS value. Default '60%' adapts to
+        parent container for any layout (top/bottom, left/right splits).
+    """
+    # Use 'inline' modifier with radius and fit settings
+    image_view = ImageView(block.content, 'inline radius:8px fit:contain')
+    image_view.build_inline(max_height=max_height)
 
 
 def _render_paragraph(block: MarkdownBlock, font_size: float) -> None:

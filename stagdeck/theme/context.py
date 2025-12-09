@@ -307,6 +307,29 @@ class ThemeContext:
             return str(value) if value is not None else match.group(0)
         
         return re.sub(r'\$\{(\w+)\}', replace_var, text)
+    
+    def child(self, **overrides) -> 'ThemeContext':
+        """Create a child context that inherits from this one.
+        
+        The child will fall back to this context for any values not overridden.
+        
+        :param overrides: Key-value pairs to override (e.g., overlay=0.5, blur=8).
+        :return: New child ThemeContext.
+        
+        Example:
+            >>> slide_theme = deck_theme.child(overlay=0.5, text_shadow='1px 1px 2px black')
+        """
+        child_ctx = ThemeContext(
+            themes=self.themes,  # Share theme references
+            deck_overrides=self.deck_overrides,  # Inherit deck overrides
+            slide_overrides=self.slide_overrides.merge(ThemeOverrides()),  # Copy slide overrides
+        )
+        # Apply new overrides
+        for key, value in overrides.items():
+            # Convert underscores to dashes for CSS properties
+            css_key = key.replace('_', '-')
+            child_ctx.slide_overrides.set(css_key, value)
+        return child_ctx
 
 
 # Convenience functions for creating override sets

@@ -359,3 +359,274 @@ Content.
         
         assert 'centered' in slides[0].classes
         assert 'large' in slides[0].classes
+
+
+class TestParseSlideMarkdown:
+    """Test parse_slide_markdown method for single-slide parsing."""
+    
+    def test_title_only(self):
+        """Parse slide with just a title."""
+        parser = MarkdownParser()
+        result = parser.parse_slide_markdown('# Hello World')
+        
+        assert result['title'] == 'Hello World'
+        assert result['subtitle'] == ''
+        assert result['content'] == ''
+        assert result['background'] == ''
+    
+    def test_title_and_subtitle(self):
+        """Parse slide with title and subtitle."""
+        parser = MarkdownParser()
+        result = parser.parse_slide_markdown('''
+# Main Title
+## Subtitle Here
+''')
+        assert result['title'] == 'Main Title'
+        assert result['subtitle'] == 'Subtitle Here'
+        assert result['content'] == ''
+    
+    def test_title_subtitle_content(self):
+        """Parse slide with title, subtitle, and content."""
+        parser = MarkdownParser()
+        result = parser.parse_slide_markdown('''
+# My Title
+## My Subtitle
+
+This is the content.
+
+- Bullet 1
+- Bullet 2
+''')
+        assert result['title'] == 'My Title'
+        assert result['subtitle'] == 'My Subtitle'
+        assert 'This is the content.' in result['content']
+        assert '- Bullet 1' in result['content']
+    
+    def test_background_color(self):
+        """Parse slide with background color."""
+        parser = MarkdownParser()
+        result = parser.parse_slide_markdown('''
+![background](#1a1a2e)
+
+# Title
+''')
+        assert result['background'] == '#1a1a2e'
+        assert result['title'] == 'Title'
+    
+    def test_background_gradient(self):
+        """Parse slide with gradient background."""
+        parser = MarkdownParser()
+        result = parser.parse_slide_markdown('''
+![background](linear-gradient(135deg, #1a1a2e 0%, #16213e 100%))
+
+# Title
+''')
+        assert 'linear-gradient' in result['background']
+        assert result['title'] == 'Title'
+    
+    def test_background_image(self):
+        """Parse slide with background image."""
+        parser = MarkdownParser()
+        result = parser.parse_slide_markdown('''
+![background](image.jpg)
+
+# Title
+''')
+        assert result['background'] == 'url(image.jpg)'
+        assert result['title'] == 'Title'
+    
+    def test_implicit_background_image(self):
+        """Parse slide with image at start (implicit background)."""
+        parser = MarkdownParser()
+        result = parser.parse_slide_markdown('''
+![](hero.jpg)
+
+# Title
+''')
+        assert result['background'] == 'url(hero.jpg)'
+        assert result['title'] == 'Title'
+    
+    def test_presenter_notes(self):
+        """Parse slide with presenter notes."""
+        parser = MarkdownParser()
+        result = parser.parse_slide_markdown('''
+# Title
+
+Content here.
+
+^ This is a presenter note.
+^ Another note.
+''')
+        assert result['title'] == 'Title'
+        assert 'This is a presenter note.' in result['notes']
+        assert 'Another note.' in result['notes']
+        assert '^' not in result['content']
+    
+    def test_content_only(self):
+        """Parse slide with content but no title."""
+        parser = MarkdownParser()
+        result = parser.parse_slide_markdown('''
+Just some content here.
+
+- Item 1
+- Item 2
+''')
+        assert result['title'] == ''
+        assert 'Just some content here.' in result['content']
+        assert '- Item 1' in result['content']
+    
+    def test_full_slide(self):
+        """Parse a complete slide with all elements."""
+        parser = MarkdownParser()
+        result = parser.parse_slide_markdown('''
+![background](#1a1a2e)
+
+# What is StagDeck?
+## A Python Presentation Framework
+
+**StagDeck** is a Python framework for creating presentations.
+
+- Pure Python - no HTML/CSS required
+- Markdown support for content
+- Theming system
+
+^ Remember to demo the live reload feature.
+''')
+        assert result['background'] == '#1a1a2e'
+        assert result['title'] == 'What is StagDeck?'
+        assert result['subtitle'] == 'A Python Presentation Framework'
+        assert '**StagDeck**' in result['content']
+        assert '- Pure Python' in result['content']
+        assert 'Remember to demo' in result['notes']
+    
+    def test_no_filter_by_default(self):
+        """No filters applied by default."""
+        parser = MarkdownParser()
+        result = parser.parse_slide_markdown('''
+![background](image.jpg)
+
+# Title
+''')
+        assert result['overlay_opacity'] is None
+        assert result['blur_radius'] is None
+    
+    def test_overlay_modifier(self):
+        """Using 'overlay' modifier sets default overlay."""
+        parser = MarkdownParser()
+        result = parser.parse_slide_markdown('''
+![overlay](image.jpg)
+
+# Title
+''')
+        assert result['overlay_opacity'] == -1.0  # Sentinel for theme default
+        assert result['blur_radius'] is None
+    
+    def test_overlay_with_value(self):
+        """Using 'overlay:N' sets specific opacity."""
+        parser = MarkdownParser()
+        result = parser.parse_slide_markdown('''
+![overlay:0.6](image.jpg)
+
+# Title
+''')
+        assert result['overlay_opacity'] == 0.6
+        assert result['blur_radius'] is None
+    
+    def test_blur_modifier(self):
+        """Using 'blur' modifier sets default blur."""
+        parser = MarkdownParser()
+        result = parser.parse_slide_markdown('''
+![blur](image.jpg)
+
+# Title
+''')
+        assert result['blur_radius'] == -1.0  # Sentinel for theme default
+        assert result['overlay_opacity'] is None
+    
+    def test_blur_with_value(self):
+        """Using 'blur:N' sets specific radius."""
+        parser = MarkdownParser()
+        result = parser.parse_slide_markdown('''
+![blur:8](image.jpg)
+
+# Title
+''')
+        assert result['blur_radius'] == 8.0
+        assert result['overlay_opacity'] is None
+    
+    def test_combined_filters(self):
+        """Can combine blur and overlay."""
+        parser = MarkdownParser()
+        result = parser.parse_slide_markdown('''
+![blur:4 overlay:0.5](image.jpg)
+
+# Title
+''')
+        assert result['blur_radius'] == 4.0
+        assert result['overlay_opacity'] == 0.5
+    
+    def test_background_left_position(self):
+        """Using 'left' modifier sets position."""
+        parser = MarkdownParser()
+        result = parser.parse_slide_markdown('''
+![left](image.jpg)
+
+# Title
+''')
+        assert result['background_position'] == 'left'
+        assert result['background'] == 'url(image.jpg)'
+    
+    def test_background_right_position(self):
+        """Using 'right' modifier sets position."""
+        parser = MarkdownParser()
+        result = parser.parse_slide_markdown('''
+![right](image.jpg)
+
+# Title
+''')
+        assert result['background_position'] == 'right'
+        assert result['background'] == 'url(image.jpg)'
+    
+    def test_split_with_overlay(self):
+        """Split layouts can have overlay."""
+        parser = MarkdownParser()
+        result = parser.parse_slide_markdown('''
+![left overlay](image.jpg)
+
+# Title
+''')
+        assert result['background_position'] == 'left'
+        assert result['overlay_opacity'] == -1.0
+    
+    def test_split_with_blur(self):
+        """Split layouts can have blur."""
+        parser = MarkdownParser()
+        result = parser.parse_slide_markdown('''
+![right blur:4](image.jpg)
+
+# Title
+''')
+        assert result['background_position'] == 'right'
+        assert result['blur_radius'] == 4.0
+    
+    def test_background_top_position(self):
+        """Using 'top' modifier sets position."""
+        parser = MarkdownParser()
+        result = parser.parse_slide_markdown('''
+![top](image.jpg)
+
+# Title
+''')
+        assert result['background_position'] == 'top'
+        assert result['background'] == 'url(image.jpg)'
+    
+    def test_background_bottom_position(self):
+        """Using 'bottom' modifier sets position."""
+        parser = MarkdownParser()
+        result = parser.parse_slide_markdown('''
+![bottom](image.jpg)
+
+# Title
+''')
+        assert result['background_position'] == 'bottom'
+        assert result['background'] == 'url(image.jpg)'

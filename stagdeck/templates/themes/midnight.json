@@ -26,8 +26,16 @@
 
   "slide": {
     "background": "${bg}",
-    "title": { "color": "${heading}", "size": 80, "weight": "bold" },
-    "subtitle": { "color": "${text_faint}", "size": 40 },
-    "text": { "color": "${text}", "size": 32 }
+    "title": { "color": "#c4d4e4", "size": 80, "weight": "bold" },
+    "subtitle": { "color": "#a5b4c4", "size": 40 },
+    "text": { "color": "#ffffff", "size": 32 },
+    "bold": { "color": "#f59e0b" },
+    "overlay": { "color": "rgba(0, 0, 0, 0.5)", "opacity": 0.5 },
+    "blur": { "radius": 4 },
+    "split_background": { "color": "${bg}" },
+    "split_title": { "color": "#c4d4e4", "size": 50, "weight": "bold" },
+    "split_subtitle": { "color": "#a5b4c4", "size": 30 },
+    "split_text": { "color": "#ffffff", "size": 32 },
+    "split_bold": { "color": "#f59e0b" }
   }
 }

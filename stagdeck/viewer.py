@@ -1,5 +1,7 @@
 """🎬 DeckViewer - UI component for presenting slide decks."""
 
+from pathlib import Path
+
 from nicegui import ui
 
 from .slide import Slide
@@ -229,6 +231,9 @@ class DeckViewer:
                         on_click=lambda n=name: ui.navigate.to(f'/?deck={n}'),
                     ).classes('font-bold' if is_current else '')
     
+    # Track registered media folders to avoid duplicates
+    _registered_media_folders: set[str] = set()
+    
     @classmethod
     def _setup_static_assets(cls) -> None:
         """📦 Setup static CSS and JS assets (once per application)."""
@@ -244,6 +249,62 @@ class DeckViewer:
         # Add CSS and JS to head for this page
         ui.add_head_html('<link rel="stylesheet" href="/stagdeck/static/styles.css">')
         ui.add_head_html('<script src="/stagdeck/static/scaling.js"></script>')
+    
+    def _setup_media_folders(self) -> None:
+        """📁 Register deck's media folders as static file routes."""
+        from nicegui import app
+        
+        for url_path, local_path in self.deck.media_folders.items():
+            # Only register each folder once
+            if url_path not in DeckViewer._registered_media_folders:
+                app.add_static_files(url_path, local_path)
+                DeckViewer._registered_media_folders.add(url_path)
+                # Also add to map for blur endpoint
+                DeckViewer._registered_media_folders_map[url_path] = local_path
+        
+        # Register blurred image endpoint
+        self._setup_blur_endpoint()
+    
+    @classmethod
+    def _setup_blur_endpoint(cls) -> None:
+        """📷 Setup endpoint for serving blurred images."""
+        from nicegui import app
+        from starlette.responses import Response
+        from pathlib import Path
+        
+        # Only register once
+        if hasattr(cls, '_blur_endpoint_registered') and cls._blur_endpoint_registered:
+            return
+        cls._blur_endpoint_registered = True
+        
+        @app.get('/stagdeck/blur')
+        async def serve_blurred_image(path: str, radius: float = 4.0):
+            """Serve a blurred version of an image."""
+            from .utils.image_processing import apply_gaussian_blur
+            
+            # Security: resolve the path and check it's within a registered media folder
+            # For now, we'll look for the image in registered media folders
+            image_path = None
+            
+            for url_prefix, local_dir in cls._registered_media_folders_map.items():
+                if path.startswith(url_prefix):
+                    relative = path[len(url_prefix):].lstrip('/')
+                    candidate = Path(local_dir) / relative
+                    if candidate.exists() and candidate.is_file():
+                        image_path = candidate
+                        break
+            
+            if image_path is None:
+                return Response(content="Image not found", status_code=404)
+            
+            try:
+                blurred_bytes = apply_gaussian_blur(image_path, blur_radius=radius)
+                return Response(content=blurred_bytes, media_type="image/jpeg")
+            except Exception as e:
+                return Response(content=f"Error processing image: {e}", status_code=500)
+    
+    # Map of URL paths to local paths for blur endpoint
+    _registered_media_folders_map: dict[str, Path] = {}
     
     def _init_from_query_params(self) -> None:
         """🔍 Initialize slide and step from URL query parameters."""
@@ -285,6 +346,7 @@ class DeckViewer:
         """🚀 Build the complete presentation UI."""
         self._init_from_query_params()
         self._setup_static_assets()
+        self._setup_media_folders()
         
         ui.query('.nicegui-content').classes('p-0')
         
@@ -319,6 +381,7 @@ class DeckViewer:
         """
         self._init_from_query_params()
         self._setup_static_assets()  # Load CSS for proper styling
+        self._setup_media_folders()  # Register media folders
         
         # No padding, exact slide dimensions
         ui.query('.nicegui-content').classes('p-0 m-0')

@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING
 
 from nicegui import ui
 
+from .content_elements import ImageView
+
 if TYPE_CHECKING:
     from ..slide import Slide
     from ..slide_deck import SlideDeck
@@ -65,6 +67,32 @@ class LayoutConfig:
 
 # Default configuration
 DEFAULT_CONFIG = LayoutConfig()
+
+# Track injected CSS to avoid duplicates
+_injected_css_hash: set[int] = set()
+
+
+def _inject_theme_css(style: 'LayoutStyle') -> None:
+    """Inject theme-specific CSS for elements like bold text.
+    
+    :param style: The layout style containing theme element definitions.
+    """
+    # Get bold style from theme
+    bold_style = style.get('bold')
+    if not bold_style or not bold_style.color:
+        return
+    
+    # Create CSS for bold text
+    css = f'.nicegui-markdown strong {{ color: {bold_style.color}; }}'
+    
+    # Avoid duplicate injection
+    css_hash = hash(css)
+    if css_hash in _injected_css_hash:
+        return
+    _injected_css_hash.add(css_hash)
+    
+    # Inject via NiceGUI
+    ui.add_head_html(f'<style>{css}</style>')
 
 
 # =============================================================================
@@ -311,6 +339,15 @@ def build_slide_layout(
     
     config = config or DEFAULT_CONFIG
     style = style or LayoutStyle()
+    
+    # Inject theme-specific CSS for bold text
+    _inject_theme_css(style)
+    
+    # Check for multi-region slide
+    if slide.regions and len(slide.regions) > 1:
+        _build_multi_region_layout(slide, step, style, config)
+        return
+    
     mode = detect_layout_mode(slide)
     
     # Use final_content for sizing calculations, current content for display
@@ -318,16 +355,216 @@ def build_slide_layout(
     
     # Background
     bg_style = _get_background_style(slide)
+    has_bg_image = _has_background_image(slide)
     
-    with ui.element('div').classes('slide-layout w-full h-full').style(bg_style):
-        if mode == LayoutMode.TITLE_ONLY:
-            _build_title_only(slide, style, config)
-        elif mode == LayoutMode.TITLE_CENTERED:
-            _build_title_centered(slide, style, config)
-        elif mode == LayoutMode.CONTENT_ONLY:
-            _build_content_only(slide, step, style, config, sizing_content)
-        else:
-            _build_title_content(slide, step, style, config, sizing_content)
+    # Get theme defaults for filters
+    overlay_style = style.get('overlay')
+    theme_overlay_color = overlay_style.color if overlay_style.color else 'rgba(0, 0, 0, 0.5)'
+    theme_overlay_opacity = getattr(overlay_style, 'opacity', 0.5) if overlay_style else 0.5
+    
+    blur_style = style.get('blur')
+    theme_blur_radius = 4  # Default
+    if blur_style and hasattr(blur_style, 'css') and blur_style.css:
+        # Try to extract radius from css if set
+        pass
+    
+    # Get split background color from theme
+    split_bg_style = style.get('split_background')
+    split_bg_color = split_bg_style.color if split_bg_style.color else '#1a1a2e'
+    
+    # For split layouts, we need a container structure to clip the image
+    position = slide.background_position
+    is_split = position in ('left', 'right', 'top', 'bottom')
+    
+    # Get style overrides from slide data (parsed from markdown)
+    style_overrides = slide.data.get('_style_overrides', {})
+    slide_blur = style_overrides.get('blur')
+    slide_overlay = style_overrides.get('overlay')
+    
+    # Determine main container style
+    # Don't apply background to main container if:
+    # - It's a split layout with image (handled separately)
+    # - It's a full image with blur (will be rendered as separate blurred layer)
+    needs_blur = slide_blur is not None and has_bg_image
+    main_style = '' if (is_split and has_bg_image) or needs_blur else bg_style
+    
+    with ui.element('div').classes('slide-layout w-full h-full relative').style(main_style):
+        # For split layouts with images, create a clipped container
+        if is_split and has_bg_image:
+            if position == 'left':
+                clip_classes = 'absolute inset-y-0 left-0 w-1/2 overflow-hidden'
+            elif position == 'right':
+                clip_classes = 'absolute inset-y-0 right-0 w-1/2 overflow-hidden'
+            elif position == 'top':
+                clip_classes = 'absolute inset-x-0 top-0 h-1/2 overflow-hidden'
+            else:  # bottom
+                clip_classes = 'absolute inset-x-0 bottom-0 h-1/2 overflow-hidden'
+            
+            with ui.element('div').classes(clip_classes):
+                # Use raw modifiers string from slide
+                image_view = ImageView(slide.background_color, slide.background_modifiers)
+                image_view.build_background(
+                    container_classes='w-full h-full',
+                    theme_overlay_opacity=theme_overlay_opacity,
+                    theme_blur_default=theme_blur_radius,
+                )
+        elif has_bg_image:
+            # Full background image - use raw modifiers from slide
+            image_view = ImageView(slide.background_color, slide.background_modifiers)
+            image_view.build_background(
+                container_classes='absolute inset-0',
+                theme_overlay_opacity=theme_overlay_opacity,
+                theme_blur_default=theme_blur_radius,
+            )
+        
+        # Content container (above overlay)
+        # For split layouts, position content on the opposite side with theme background
+        content_classes = 'relative w-full h-full z-10'
+        content_style = ''
+        position = slide.background_position
+        
+        # Use consistent padding matching other slide types
+        padding = f'padding: {config.margin_top}% {config.margin_right}% {config.margin_bottom}% {config.margin_left}%;'
+        
+        if position == 'left':
+            # Image on left, content on right half
+            content_classes = 'absolute right-0 top-0 w-1/2 h-full z-10 flex flex-col'
+            content_style = f'background: {split_bg_color}; {padding}'
+        elif position == 'right':
+            # Image on right, content on left half
+            content_classes = 'absolute left-0 top-0 w-1/2 h-full z-10 flex flex-col'
+            content_style = f'background: {split_bg_color}; {padding}'
+        elif position == 'top':
+            # Image on top, content on bottom half
+            content_classes = 'absolute left-0 bottom-0 w-full h-1/2 z-10 flex flex-col'
+            content_style = f'background: {split_bg_color}; {padding}'
+        elif position == 'bottom':
+            # Image on bottom, content on top half
+            content_classes = 'absolute left-0 top-0 w-full h-1/2 z-10 flex flex-col'
+            content_style = f'background: {split_bg_color}; {padding}'
+        
+        with ui.element('div').classes(content_classes).style(content_style):
+            # Use split styles for content on dark background
+            if mode == LayoutMode.TITLE_ONLY:
+                _build_title_only(slide, style, config, use_split_styles=True)
+            elif mode == LayoutMode.TITLE_CENTERED:
+                _build_title_centered(slide, style, config, use_split_styles=True)
+            elif mode == LayoutMode.CONTENT_ONLY:
+                _build_content_only(slide, step, style, config, sizing_content)
+            else:
+                _build_title_content(slide, step, style, config, sizing_content, use_split_styles=True)
+
+
+def _extract_image_path(image_url: str) -> str:
+    """Extract the base image path from a URL for comparison.
+    
+    :param image_url: Image URL like 'url(/media/photo.jpg)' or '/media/photo.jpg'.
+    :return: Normalized path for comparison.
+    """
+    if image_url.startswith('url(') and image_url.endswith(')'):
+        return image_url[4:-1].strip('"\'')
+    return image_url
+
+
+def _build_multi_region_layout(
+    slide: 'Slide',
+    step: int,
+    style: 'LayoutStyle',
+    config: LayoutConfig,
+) -> None:
+    """Build a multi-region slide with multiple image/content pairs.
+    
+    Regions are laid out in equal-width columns (horizontal) or rows (vertical).
+    Filters are only applied when explicitly requested via overlay/blur modifiers.
+    
+    When regions share the same image, renders a seamless panorama where each
+    region shows its portion of the full image.
+    """
+    from .content_elements import REM_TO_PX_FACTOR
+    
+    regions = slide.regions
+    num_regions = len(regions)
+    direction = slide.region_direction
+    
+    # Check if all regions share the same base image (for seamless panorama)
+    image_paths = [_extract_image_path(r.image) for r in regions if r.image]
+    all_same_image = len(set(image_paths)) == 1 and len(image_paths) == num_regions
+    
+    # Get theme defaults for filters
+    overlay_style = style.get('overlay')
+    theme_overlay_opacity = getattr(overlay_style, 'opacity', 0.5) if overlay_style else 0.5
+    theme_blur_radius = 4  # Default
+    
+    split_bg_style = style.get('split_background')
+    split_bg_color = split_bg_style.color if split_bg_style.color else '#1a1a2e'
+    
+    split_title_style = style.get('split_title')
+    split_subtitle_style = style.get('split_subtitle')
+    split_text_style = style.get('split_text')
+    
+    # Calculate region size
+    if direction == 'horizontal':
+        region_width = f'{100 / num_regions}%'
+        region_height = '100%'
+        flex_direction = 'row'
+    else:
+        region_width = '100%'
+        region_height = f'{100 / num_regions}%'
+        flex_direction = 'column'
+    
+    with ui.element('div').classes('slide-layout w-full h-full').style(
+        f'display: flex; flex-direction: {flex_direction};'
+    ):
+        for idx, region in enumerate(regions):
+            # Region container
+            with ui.element('div').classes('relative overflow-hidden').style(
+                f'width: {region_width}; height: {region_height};'
+            ):
+                # Background image (if any)
+                if region.image:
+                    # Use raw modifiers string directly from region
+                    image_view = ImageView(region.image, region.modifiers)
+                    
+                    # Pass region info for seamless tiling when same image is used
+                    image_view.build_background(
+                        container_classes='absolute inset-0',
+                        theme_overlay_opacity=theme_overlay_opacity,
+                        theme_blur_default=theme_blur_radius,
+                        region_index=idx if all_same_image else 0,
+                        region_count=num_regions if all_same_image else 1,
+                        region_direction=direction,
+                    )
+                else:
+                    # No image - use theme background for content
+                    ui.element('div').classes('absolute inset-0').style(
+                        f'background: {split_bg_color};'
+                    )
+                
+                # Content container
+                padding = f'padding: {config.margin_top}% {config.margin_right}% {config.margin_bottom}% {config.margin_left}%;'
+                
+                with ui.element('div').classes('relative z-10 w-full h-full flex flex-col').style(padding):
+                    # Title - use split_title style from theme (same as single-image split)
+                    if region.title:
+                        title_el = ui.label(region.title)
+                        if split_title_style:
+                            split_title_style.apply(title_el)
+                        title_el.style('margin-bottom: 0.5rem;')
+                    
+                    # Subtitle - use split_subtitle style from theme
+                    if region.subtitle:
+                        subtitle_el = ui.label(region.subtitle)
+                        if split_subtitle_style:
+                            split_subtitle_style.apply(subtitle_el)
+                        subtitle_el.style('margin-bottom: 1rem;')
+                    
+                    # Content - use split_text style from theme
+                    if region.content:
+                        with ui.element('div').classes('flex-1') as content_el:
+                            if split_text_style:
+                                split_text_style.apply(content_el)
+                            content_el.style('line-height: 1.5;')
+                            ui.markdown(region.content)
 
 
 def _get_background_style(slide: 'Slide') -> str:
@@ -336,78 +573,162 @@ def _get_background_style(slide: 'Slide') -> str:
         return ''
     
     bg = slide.background_color
+    position = slide.background_position
+    
+    # Handle background images: url(...)
+    if bg.startswith('url('):
+        # For split layouts, position the image with cover to maintain aspect ratio
+        if position == 'left':
+            return f'background: {bg} left center/cover no-repeat;'
+        elif position == 'right':
+            return f'background: {bg} right center/cover no-repeat;'
+        elif position == 'top':
+            return f'background: {bg} center top/cover no-repeat;'
+        elif position == 'bottom':
+            return f'background: {bg} center bottom/cover no-repeat;'
+        else:
+            return f'background: {bg} center/cover no-repeat;'
+    
+    # Handle gradients
     if 'gradient' in bg or bg.startswith('radial') or bg.startswith('linear'):
         return f'background: {bg};'
+    
+    # Plain color
     return f'background-color: {bg};'
+
+
+def _has_background_image(slide: 'Slide') -> bool:
+    """Check if slide has a background image."""
+    return slide.background_color.startswith('url(')
+
+
+def _get_element_style(slide: 'Slide', element: str) -> tuple[str, str]:
+    """Get CSS and Tailwind classes for a specific element from slide overrides.
+    
+    :param slide: The slide containing style overrides.
+    :param element: Element name ('title', 'subtitle', 'text', etc.).
+    :return: Tuple of (css_string, tailwind_classes).
+    """
+    text_style = slide.data.get('_style_overrides', {}).get(element, {})
+    if not text_style:
+        return '', ''
+    
+    css_parts = []
+    classes = []
+    
+    for prop, value in text_style.items():
+        if prop == 'class':
+            # Tailwind classes
+            classes.append(value)
+        else:
+            # CSS property - convert common shorthand names
+            css_prop = prop.replace('_', '-')
+            # Map common shortcuts to full CSS property names
+            prop_map = {
+                'shadow': 'text-shadow',
+                'bg': 'background',
+                'size': 'font-size',
+                'weight': 'font-weight',
+            }
+            css_prop = prop_map.get(css_prop, css_prop)
+            css_parts.append(f'{css_prop}: {value};')
+    
+    return ' '.join(css_parts), ' '.join(classes)
 
 
 def _build_title_only(
     slide: 'Slide',
     style: 'LayoutStyle',
     config: LayoutConfig,
+    use_split_styles: bool = False,
 ) -> None:
     """Build title-only layout - large centered title."""
     # For centered content, use symmetric vertical padding
     vertical_padding = (config.margin_top + config.margin_bottom) / 2
     
+    # Get element-specific overrides from slide
+    title_override_css, title_override_classes = _get_element_style(slide, 'title')
+    subtitle_override_css, subtitle_override_classes = _get_element_style(slide, 'subtitle')
+    
+    # Get theme styles - use split styles for dark backgrounds
+    if use_split_styles:
+        title_style = style.get('split_title')
+        subtitle_style = style.get('split_subtitle')
+    else:
+        title_style = style.get('title')
+        subtitle_style = style.get('subtitle')
+    
     # Full-page centered container
     with ui.element('div').classes('w-full h-full flex flex-col items-center justify-center').style(
         f'padding: {vertical_padding}% {config.margin_right}% {vertical_padding}% {config.margin_left}%;'
     ):
-        # Title - large and prominent
-        title_css = style.to_css('title') or ''
-        ui.label(slide.title).classes(
-            f'text-center font-bold {style.to_tailwind("title")}'
-        ).style(
-            f'font-size: {config.title_only_size}rem; line-height: 1.1; {title_css}'
-        )
+        # Title
+        title_el = ui.label(slide.title).classes(f'text-center {title_override_classes}')
+        if title_style:
+            title_style.apply(title_el)
+        if title_override_css:
+            title_el.style(title_override_css)
         
         # Subtitle if present
         if slide.subtitle:
-            subtitle_css = style.to_css('subtitle') or ''
-            ui.label(slide.subtitle).classes(
-                f'text-center mt-8 {style.to_tailwind("subtitle")}'
-            ).style(
-                f'font-size: {config.subtitle_size}rem; line-height: 1.3; opacity: 0.8; {subtitle_css}'
-            )
+            subtitle_el = ui.label(slide.subtitle).classes(f'text-center mt-8 {subtitle_override_classes}')
+            if subtitle_style:
+                subtitle_style.apply(subtitle_el)
+            if subtitle_override_css:
+                subtitle_el.style(subtitle_override_css)
 
 
 def _build_title_centered(
     slide: 'Slide',
     style: 'LayoutStyle',
     config: LayoutConfig,
+    use_split_styles: bool = False,
 ) -> None:
     """Build centered layout - title, subtitle, and small content all centered."""
     # For centered content, use symmetric vertical padding
     vertical_padding = (config.margin_top + config.margin_bottom) / 2
     
+    # Get element-specific overrides from slide
+    title_override_css, title_override_classes = _get_element_style(slide, 'title')
+    subtitle_override_css, subtitle_override_classes = _get_element_style(slide, 'subtitle')
+    text_override_css, text_override_classes = _get_element_style(slide, 'text')
+    
+    # Get theme styles - use split styles for dark backgrounds
+    if use_split_styles:
+        title_style = style.get('split_title')
+        subtitle_style = style.get('split_subtitle')
+        text_style = style.get('split_text')
+    else:
+        title_style = style.get('title')
+        subtitle_style = style.get('subtitle')
+        text_style = style.get('text')
+    
     # Full-page centered container
     with ui.element('div').classes('w-full h-full flex flex-col items-center justify-center').style(
         f'padding: {vertical_padding}% {config.margin_right}% {vertical_padding}% {config.margin_left}%;'
     ):
-        # Title - large
-        title_css = style.to_css('title') or ''
-        ui.label(slide.title).classes(
-            f'text-center font-bold {style.to_tailwind("title")}'
-        ).style(
-            f'font-size: {config.title_only_size}rem; line-height: 1.1; {title_css}'
-        )
+        # Title
+        title_el = ui.label(slide.title).classes(f'text-center {title_override_classes}')
+        if title_style:
+            title_style.apply(title_el)
+        if title_override_css:
+            title_el.style(title_override_css)
         
         # Subtitle
         if slide.subtitle:
-            subtitle_css = style.to_css('subtitle') or ''
-            ui.label(slide.subtitle).classes(
-                f'text-center mt-6 {style.to_tailwind("subtitle")}'
-            ).style(
-                f'font-size: {config.subtitle_size}rem; line-height: 1.3; opacity: 0.8; {subtitle_css}'
-            )
+            subtitle_el = ui.label(slide.subtitle).classes(f'text-center mt-6 {subtitle_override_classes}')
+            if subtitle_style:
+                subtitle_style.apply(subtitle_el)
+            if subtitle_override_css:
+                subtitle_el.style(subtitle_override_css)
         
         # Small content - centered below
         if slide.content:
-            text_css = style.to_css('text') or ''
-            with ui.element('div').classes('mt-12 text-center').style(
-                f'font-size: 1.8rem; line-height: 1.6; {text_css}'
-            ):
+            with ui.element('div').classes(f'mt-12 text-center {text_override_classes}') as content_el:
+                if text_style:
+                    text_style.apply(content_el)
+                if text_override_css:
+                    content_el.style(text_override_css)
                 ui.markdown(slide.content).classes('text-center')
 
 
@@ -440,10 +761,26 @@ def _build_title_content(
     style: 'LayoutStyle',
     config: LayoutConfig,
     sizing_content: str,
+    use_split_styles: bool = False,
 ) -> None:
     """Build title+content layout - PowerPoint style."""
     # Detect if content is a table (needs to fill space)
     is_table_content = slide.content.strip().startswith('|') and '|' in slide.content
+    
+    # Get element-specific overrides from slide
+    title_override_css, title_override_classes = _get_element_style(slide, 'title')
+    subtitle_override_css, subtitle_override_classes = _get_element_style(slide, 'subtitle')
+    text_override_css, text_override_classes = _get_element_style(slide, 'text')
+    
+    # Get theme styles - use split styles for dark backgrounds
+    if use_split_styles:
+        title_style = style.get('split_title')
+        subtitle_style = style.get('split_subtitle')
+        text_style = style.get('split_text')
+    else:
+        title_style = style.get('title')
+        subtitle_style = style.get('subtitle')
+        text_style = style.get('text')
     
     # Main container with margins
     with ui.element('div').classes('w-full h-full flex flex-col').style(
@@ -453,22 +790,20 @@ def _build_title_content(
         with ui.element('div').classes('flex-shrink-0').style(
             f'margin-bottom: {config.title_gap}%;'
         ):
-            title_css = style.to_css('title') or ''
-            ui.label(slide.title).classes(
-                f'font-bold {style.to_tailwind("title")}'
-            ).style(
-                f'font-size: {config.title_size}rem; line-height: 1.2; {title_css}'
-            )
+            title_el = ui.label(slide.title).classes(title_override_classes)
+            if title_style:
+                title_style.apply(title_el)
+            if title_override_css:
+                title_el.style(title_override_css)
         
         # Subtitle if present (part of title region)
         if slide.subtitle:
             with ui.element('div').classes('flex-shrink-0').style('margin-bottom: 1rem;'):
-                subtitle_css = style.to_css('subtitle') or ''
-                ui.label(slide.subtitle).classes(
-                    f'{style.to_tailwind("subtitle")}'
-                ).style(
-                    f'font-size: 2rem; line-height: 1.3; opacity: 0.8; {subtitle_css}'
-                )
+                subtitle_el = ui.label(slide.subtitle).classes(subtitle_override_classes)
+                if subtitle_style:
+                    subtitle_style.apply(subtitle_el)
+                if subtitle_override_css:
+                    subtitle_el.style(subtitle_override_css)
         
         # Content region (fills remaining space)
         # For tables: fill and stretch. For other content: center vertically
@@ -476,7 +811,12 @@ def _build_title_content(
         if not is_table_content:
             content_classes += ' justify-center'
         
-        with ui.element('div').classes(content_classes).style('min-height: 0;'):
+        with ui.element('div').classes(f'{content_classes} {text_override_classes}') as content_el:
+            content_el.style('min-height: 0;')
+            if text_style:
+                text_style.apply(content_el)
+            if text_override_css:
+                content_el.style(text_override_css)
             _render_content(slide.content, style, config, is_full_page=False)
 
 

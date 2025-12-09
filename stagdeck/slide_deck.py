@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from .slide import Slide
+from .slide import Slide, SlideRegion
 
 if TYPE_CHECKING:
     from .theme import LayoutStyle, Theme, ThemeContext, ThemeOverrides
@@ -27,6 +27,7 @@ class SlideDeck:
     :ivar default_step_duration: Default duration in seconds for each step.
     :ivar default_transition_duration: Default transition animation duration in seconds.
     :ivar theme_context: Theme context for cascading theme resolution.
+    :ivar media_folders: Registered media folders (url_path -> local_path).
     """
     title: str = 'Presentation'
     master: 'SlideDeck | None' = None
@@ -39,6 +40,7 @@ class SlideDeck:
     default_step_duration: float = 5.0
     default_transition_duration: float = 0.5
     theme_context: 'ThemeContext | None' = None
+    media_folders: dict[str, Path] = field(default_factory=dict)
     
     @property
     def aspect_ratio(self) -> float:
@@ -68,8 +70,51 @@ class SlideDeck:
         self.slides.append(slide)
         return self
     
+    def add_media_folder(
+        self,
+        local_path: str | Path,
+        url_path: str = '/media',
+    ) -> 'SlideDeck':
+        """📁 Register a media folder for use in markdown.
+        
+        The folder will be served at the specified URL path, allowing
+        images and other media to be referenced in markdown:
+        
+        ```python
+        deck.add_media_folder('./media')
+        
+        deck.add('''
+        # My Slide
+        
+        ![inline](/media/diagram.png)
+        ''')
+        ```
+        
+        Security: Only files within the registered folder are accessible.
+        Path traversal attempts (../) are blocked.
+        
+        :param local_path: Path to the local folder (absolute or relative).
+        :param url_path: URL path prefix (default '/media').
+        :return: Self for chaining.
+        :raises ValueError: If the folder doesn't exist.
+        """
+        path = Path(local_path).resolve()
+        
+        if not path.exists():
+            raise ValueError(f"Media folder does not exist: {path}")
+        if not path.is_dir():
+            raise ValueError(f"Media path is not a directory: {path}")
+        
+        # Normalize url_path to start with / and not end with /
+        url_path = '/' + url_path.strip('/')
+        
+        self.media_folders[url_path] = path
+        return self
+    
     def add(
         self,
+        markdown: str = '',
+        *,
         name: str = '',
         layout: str = '',
         title: str = '',
@@ -77,7 +122,8 @@ class SlideDeck:
         subtitle: str = '',
         notes: str = '',
         builder=None,
-        background_color: str = '',
+        background: str = '',
+        background_color: str = '',  # Alias for background (backward compat)
         style: 'LayoutStyle | None' = None,
         theme_overrides: 'ThemeOverrides | None' = None,
         steps: int = 1,
@@ -86,48 +132,179 @@ class SlideDeck:
         transition_duration: float | None = None,
         **kwargs,
     ) -> 'SlideDeck':
-        """➕ Convenience method to create and add a slide.
+        """➕ Add a slide from markdown or explicit parameters.
         
+        Can be called with a single markdown string that includes title,
+        subtitle, background, and content following Deckset conventions:
+        
+        ```python
+        deck.add('''
+        ![background](#1a1a2e)
+        
+        # Slide Title
+        ## Optional Subtitle
+        
+        Content goes here...
+        ''')
+        ```
+        
+        Or with explicit parameters (backward compatible):
+        
+        ```python
+        deck.add(
+            title='Slide Title',
+            content='Content here',
+            background='#1a1a2e',
+        )
+        ```
+        
+        Markdown syntax:
+        - `# Heading` = slide title
+        - `## Heading` after title = subtitle  
+        - `![background](#color)` = background color
+        - `![background](image.jpg)` = background image
+        - `![](image.jpg)` at start = background image
+        - `^ Note text` = presenter notes
+        - Everything else = content
+        
+        :param markdown: Markdown source for the slide (parsed automatically).
         :param name: Slide name (auto-generated if empty).
         :param layout: Master layout name.
-        :param title: Slide title.
-        :param content: Slide content (markdown supported).
-        :param subtitle: Slide subtitle.
-        :param notes: Speaker notes.
+        :param title: Slide title (overrides markdown).
+        :param content: Slide content (overrides markdown).
+        :param subtitle: Slide subtitle (overrides markdown).
+        :param notes: Speaker notes (overrides markdown).
         :param builder: Custom builder function.
-        :param background_color: Background color/gradient.
+        :param background: Background color/gradient/image.
+        :param background_color: Alias for background (backward compat).
         :param style: LayoutStyle for this slide.
         :param theme_overrides: Slide-specific theme overrides.
         :param steps: Number of incremental steps.
         :param step_names: Names for each step.
         :param step_durations: Duration for each step.
         :param transition_duration: Transition animation duration.
-        :param kwargs: Additional data for layout elements (e.g., body, left, right, image).
+        :param kwargs: Additional data for layout elements.
         :return: Self for chaining.
         """
+        # Parse markdown if provided
+        parsed_title = ''
+        parsed_subtitle = ''
+        parsed_content = ''
+        parsed_background = ''
+        parsed_background_position = ''
+        parsed_notes = ''
+        parsed_regions: list[SlideRegion] = []
+        parsed_direction = 'horizontal'
+        parsed_background_modifiers = ''  # Raw modifier string for ImageView
+        parsed_style_overrides: dict[str, Any] = {}  # Collected from markdown
+        
+        if markdown:
+            from .components.markdown_parser import MarkdownParser
+            parser = MarkdownParser()
+            
+            # Use multi-region parser to detect if this is a multi-region slide
+            multi = parser.parse_multi_region_markdown(markdown)
+            parsed_notes = multi.get('notes', '')
+            parsed_direction = multi.get('direction', 'horizontal')
+            regions_data = multi.get('regions', [])
+            
+            if len(regions_data) > 1:
+                # Multi-region slide
+                for r in regions_data:
+                    # Build region theme context from overrides
+                    region_theme = None
+                    overlay = r.get('overlay_opacity')
+                    blur = r.get('blur_radius')
+                    
+                    if overlay is not None or blur is not None:
+                        from .theme import ThemeContext
+                        region_theme = ThemeContext()
+                        if overlay is not None:
+                            region_theme.slide_overrides.set('overlay', overlay)
+                        if blur is not None:
+                            region_theme.slide_overrides.set('blur', blur)
+                    
+                    parsed_regions.append(SlideRegion(
+                        image=r.get('image', ''),
+                        modifiers=r.get('modifiers', ''),
+                        content=r.get('content', ''),
+                        title=r.get('title', ''),
+                        subtitle=r.get('subtitle', ''),
+                        position=r.get('position', ''),
+                        theme_context=region_theme,
+                    ))
+            else:
+                # Single-region slide - use standard parsing for backward compat
+                parsed = parser.parse_slide_markdown(markdown)
+                parsed_title = parsed.get('title', '')
+                parsed_subtitle = parsed.get('subtitle', '')
+                parsed_content = parsed.get('content', '')
+                parsed_background = parsed.get('background', '')
+                parsed_background_modifiers = parsed.get('background_modifiers', '')
+                parsed_background_position = parsed.get('background_position', '')
+                parsed_notes = parsed.get('notes', '')
+                
+                # Collect style overrides from parsed markdown
+                if parsed.get('overlay_opacity') is not None:
+                    parsed_style_overrides['overlay'] = parsed['overlay_opacity']
+                if parsed.get('blur_radius') is not None:
+                    parsed_style_overrides['blur'] = parsed['blur_radius']
+                if parsed.get('text_style'):
+                    parsed_style_overrides.update(parsed['text_style'])
+        
+        # Explicit params override parsed values
+        final_title = title if title else parsed_title
+        final_subtitle = subtitle if subtitle else parsed_subtitle
+        final_content = content if content else parsed_content
+        final_notes = notes if notes else parsed_notes
+        
+        # Background: explicit > background_color (alias) > parsed
+        final_background = background or background_color or parsed_background
+        
         slide_name = name if name else f'slide_{len(self.slides)}'
         slide_layout = layout if layout else self.default_layout
         
         # Build data dict from explicit params and kwargs
         data = dict(kwargs)
-        if title:
-            data['title'] = title
-        if subtitle:
-            data['subtitle'] = subtitle
-        if content:
-            data['body'] = content  # Map content to body for layouts
+        if final_title:
+            data['title'] = final_title
+        if final_subtitle:
+            data['subtitle'] = final_subtitle
+        if final_content:
+            data['body'] = final_content  # Map content to body for layouts
+        
+        # Build slide theme from overrides
+        slide_theme = None
+        if parsed_style_overrides or theme_overrides:
+            from .theme import ThemeContext
+            # Start with deck theme if available, otherwise create empty context
+            if self.theme_context:
+                slide_theme = self.theme_context.child(**parsed_style_overrides)
+            else:
+                slide_theme = ThemeContext()
+                for key, value in parsed_style_overrides.items():
+                    slide_theme.slide_overrides.set(key, value)
+            # Apply explicit theme_overrides on top
+            if theme_overrides:
+                slide_theme.push_slide_overrides(theme_overrides)
+        
+        # Store parsed overrides in data for layout rendering
+        data['_style_overrides'] = parsed_style_overrides
         
         self.slides.append(Slide(
             name=slide_name,
             layout=slide_layout,
-            title=title,
-            content=content,
-            subtitle=subtitle,
-            notes=notes,
+            title=final_title,
+            content=final_content,
+            subtitle=final_subtitle,
+            notes=final_notes,
             builder=builder,
-            background_color=background_color,
-            style=style,
-            theme_overrides=theme_overrides,
+            background_color=final_background,
+            background_modifiers=parsed_background_modifiers,
+            background_position=parsed_background_position,
+            regions=parsed_regions,
+            region_direction=parsed_direction,
+            theme_context=slide_theme,
             steps=steps,
             step_names=step_names,
             step_durations=step_durations,

@@ -409,18 +409,91 @@ title_tw = theme.get_layout('title').title.to_tailwind()  # 'text-white'
 
 ---
 
-## 8. File Structure
+## 8. Slide Element Styles
+
+The `slide` section in theme JSON defines styles for various slide elements:
+
+### 8.1 Core Slide Elements
+
+```json
+{
+  "slide": {
+    "background": "${bg}",
+    "title": { "color": "${heading}", "size": 60, "weight": "bold" },
+    "subtitle": { "color": "${text_faint}", "size": 30 },
+    "text": { "color": "${text}", "size": 20 }
+  }
+}
+```
+
+### 8.2 Filter Styles
+
+Controls the overlay and blur filters applied to background images:
+
+```json
+{
+  "slide": {
+    "overlay": { "color": "rgba(0, 0, 0, 0.5)", "opacity": 0.5 },
+    "blur": { "radius": 8 }
+  }
+}
+```
+
+**Filters are never applied by default** - you must explicitly request them:
+
+- `![overlay](image.jpg)` - Apply overlay with theme default opacity
+- `![overlay:0.6](image.jpg)` - Apply overlay with 60% opacity
+- `![blur](image.jpg)` - Apply blur with theme default radius
+- `![blur:8](image.jpg)` - Apply blur with 8px radius
+- `![blur:4 overlay:0.5](image.jpg)` - Combine both filters
+
+### 8.3 Split Layout Styles
+
+Styles for split layouts (left/right/top/bottom) and multi-region slides:
+
+```json
+{
+  "slide": {
+    "split_background": { "color": "${bg_inverse}" },
+    "split_title": { "color": "${fg_inverse}", "size": 50, "weight": "bold" },
+    "split_subtitle": { "color": "${fg_inverse}", "size": 30, "opacity": 0.7 },
+    "split_text": { "color": "${fg_inverse}", "size": 32 }
+  }
+}
+```
+
+| Element | Purpose |
+|---------|---------|
+| `split_background` | Background color for content area in split layouts |
+| `split_title` | Title style in split/multi-region layouts |
+| `split_subtitle` | Subtitle style in split/multi-region layouts |
+| `split_text` | Body text style in split/multi-region layouts |
+
+### 8.4 Theme Differences
+
+**Aurora (light theme):**
+- `split_background`: Uses `${bg_inverse}` (dark) for contrast with light images
+- `split_title/text`: Uses `${fg_inverse}` (white) for readability on dark background
+
+**Midnight (dark theme):**
+- `split_background`: Uses `${bg}` (dark) matching the overall theme
+- `split_title/text`: Uses `${heading}` / `${text}` (light colors)
+
+---
+
+## 9. File Structure
 
 ```
 stagdeck/
 ├── theme/
 │   ├── __init__.py          # Exports
 │   ├── theme.py             # Theme class
-│   ├── layout_style.py      # LayoutStyle, ElementStyle
+│   ├── styles.py            # SlideStyle, ElementStyle
 │   ├── evaluator.py         # SafeExpressionEvaluator
-│   └── cache.py             # CacheManager
-└── themes/
-    ├── default.json
-    ├── dark.json
-    └── corporate.json
+│   ├── cache.py             # CacheManager
+│   └── loader.py            # Theme loading utilities
+└── templates/
+    └── themes/
+        ├── aurora.json      # Light theme
+        └── midnight.json    # Dark theme
 ```

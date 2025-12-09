@@ -98,10 +98,11 @@ slide.final_content = """             # Used for sizing
 
 | Area | Purpose | Typical Size |
 |------|---------|--------------|
-| Header margin | Space for slide numbers, logos | 3-5% of height |
-| Footer margin | Space for footer text, page numbers | 3-5% of height |
-| Side margins | Breathing room, safe area | 3-5% of width |
-| Title region | Fixed title area (when present) | 15-20% of height |
+| Header margin | Space for slide numbers, logos | 3% of height |
+| Footer margin | Space for footer text, page numbers | 6% of height |
+| Side margins | Breathing room, safe area | 5% of width |
+| Title region | Fixed title area (when present) | 10% of height |
+| Title gap | Space between title and content | 2.5% of height |
 | Content region | Main content area | Remaining space |
 
 ### Programmatic Scaling (Not Pure CSS)
@@ -143,25 +144,42 @@ def calculate_scale(content, available_area):
     return base_font_size
 ```
 
-#### Scaling Thresholds
+#### Table Scaling Thresholds
 
-| Content Type | Default Size | Scale Down When |
-|--------------|--------------|-----------------|
-| Bullet list | 1.8rem | > 8 items, or lines > 80 chars |
-| Table | 1.6rem | > 6 rows, > 5 cols, or cells > 20 chars avg |
-| Code block | 1.4rem | > 15 lines or lines > 60 chars |
-| Paragraph | 1.8rem | > 500 chars total |
+Tables scale **up** for fewer rows and **down** for more rows:
 
-#### Scale Factors
+| Row Count | Scale Factor | Result |
+|-----------|--------------|--------|
+| ≤5 rows | 1.6x | Large text, fills space |
+| 6-7 rows | 1.4x | Slightly larger |
+| 8 rows | 1.2x | Comfortable |
+| 9-10 rows | 1.0x | Default size |
+| 11-12 rows | 0.8x | Reduced |
+| >12 rows | 0.65x | Minimum |
+
+Additional adjustments:
+- **>6 columns**: Scale × 0.9
+- **>5 columns**: Scale × 0.95
+- **Long cells (>30 chars avg)**: Scale × 0.9
+- **Medium cells (>20 chars avg)**: Scale × 0.95
+
+#### Other Content Scaling
+
+| Content Type | Default Size | Scale Behavior |
+|--------------|--------------|----------------|
+| Bullet list | 1.8rem | Scale down for >8 items or long lines |
+| Code block | 1.4rem | Scale down for >15 lines |
+| Paragraph | 1.8rem | Scale down for >500 chars |
+
+#### Scale Limits
 
 ```
-Scale 1.0  = Default size (fits comfortably)
-Scale 0.85 = Slightly reduced (moderate content)
-Scale 0.7  = Reduced (dense content)
-Scale 0.6  = Minimum (very dense, still readable)
+Maximum scale: 1.6  (small tables fill space)
+Default scale: 1.0  (fits comfortably)
+Minimum scale: 0.4  (very dense, still readable)
 ```
 
-**Never scale below 0.6** - content should be split across slides instead.
+**Never scale below 0.4** - content should be split across slides instead.
 
 ---
 
@@ -390,10 +408,135 @@ console.log(greet("World"));
 
 ### Background Images
 
+Full-screen background image:
+
 ```markdown
 ![](background.jpg)
 
 # Title Over Image
+```
+
+### Image Filters
+
+Apply filters to improve text readability over images. Filters are **never applied by default** - you must explicitly request them.
+
+#### Overlay Filter
+
+Adds a semi-transparent color overlay (defined in theme):
+
+```markdown
+![overlay](image.jpg)           # Default overlay opacity from theme
+![overlay:0.6](image.jpg)       # 60% opacity overlay
+![overlay:0.3](image.jpg)       # 30% opacity (subtle)
+```
+
+#### Blur Filter
+
+Applies a Gaussian blur to the image:
+
+```markdown
+![blur](image.jpg)              # Default blur radius from theme
+![blur:8](image.jpg)            # Blur with radius 8px
+![blur:4](image.jpg)            # Subtle blur
+```
+
+#### Combined Filters
+
+Combine multiple filters for maximum readability:
+
+```markdown
+![blur overlay](image.jpg)              # Both with defaults
+![blur:8 overlay](image.jpg)            # Blur 8px + default overlay
+![blur:4 overlay:0.5](image.jpg)        # Blur 4px + 50% overlay
+```
+
+### Split Layouts
+
+Position an image on one side with content on the other:
+
+```markdown
+![left](image.jpg)
+# Left Image
+Content appears on the right side.
+
+![right](image.jpg)
+# Right Image  
+Content appears on the left side.
+
+![top](image.jpg)
+# Top Image
+Content appears below.
+
+![bottom](image.jpg)
+# Bottom Image
+Content appears above.
+```
+
+Combine with filters for busy images:
+
+```markdown
+![left overlay](image.jpg)
+# With Overlay
+Text is more readable on busy images.
+
+![right blur:4](image.jpg)
+# With Blur
+Subtle blur keeps focus on content.
+```
+
+### Multi-Region Layouts
+
+Create slides with multiple image/content pairs:
+
+**Two-column layout:**
+```markdown
+![left](image1.jpg)
+# Left Title
+Left content here.
+
+![right](image2.jpg)
+# Right Title
+Right content here.
+```
+
+**Three-column layout:**
+```markdown
+![](image1.jpg)
+# Feature One
+- Point A
+- Point B
+
+![](image2.jpg)
+# Feature Two
+Description here.
+
+![](image3.jpg)
+# Feature Three
+More content.
+```
+
+**Vertical multi-region:**
+```markdown
+![top](image1.jpg)
+# Top Section
+
+![bottom](image2.jpg)
+# Bottom Section
+```
+
+### Media Folders
+
+Register local folders to serve images:
+
+```python
+from pathlib import Path
+deck.add_media_folder(Path(__file__).parent / 'media', '/media')
+```
+
+Then reference images by URL path:
+
+```markdown
+![](/media/photo.jpg)
 ```
 
 ### Videos
@@ -504,7 +647,17 @@ Studies show significant improvement[^1].
 
 ^ Presenter note                 <- Hidden from slides
 
-![](image.png)                   <- Image
+![](image.png)                   <- Background image (no filter)
+![overlay](image.png)            <- With overlay filter
+![blur](image.png)               <- With blur filter
+![blur:8 overlay:0.5](image.png) <- Blur 8px + 50% overlay
+![left](image.png)               <- Split: image left, content right
+![right](image.png)              <- Split: image right, content left
+![top](image.png)                <- Split: image top, content bottom
+![bottom](image.png)             <- Split: image bottom, content top
+![left overlay](image.png)       <- Split with overlay
+![inline](image.png)             <- Inline image in content
+
 ```python                        <- Code block
 
 $$E = mc^2$$                     <- Math formula
@@ -513,3 +666,69 @@ footer: My Talk                  <- Footer text
 slidenumbers: true               <- Show slide numbers
 build-lists: true                <- Progressive reveal
 ```
+
+### Image Modifiers Summary
+
+#### Position Modifiers
+
+| Modifier | Position | Description |
+|----------|----------|-------------|
+| `![](img)` | Full background | Covers entire slide |
+| `![left](img)` | Left half | Content on right |
+| `![right](img)` | Right half | Content on left |
+| `![top](img)` | Top half | Content below |
+| `![bottom](img)` | Bottom half | Content above |
+| `![inline](img)` | In content | Within text flow |
+
+#### Filter Modifiers
+
+| Modifier | Effect | Example |
+|----------|--------|---------|
+| `overlay` | Color overlay | `![overlay](img)` |
+| `overlay:N` | Overlay with opacity N | `![overlay:0.6](img)` |
+| `blur` | Gaussian blur | `![blur](img)` |
+| `blur:N` | Blur with radius N px | `![blur:8](img)` |
+
+#### Combined Examples
+
+| Syntax | Effect |
+|--------|--------|
+| `![left overlay](img)` | Left split with overlay |
+| `![blur:4 overlay:0.5](img)` | Blur 4px + 50% overlay |
+| `![right blur](img)` | Right split with blur |
+
+### Element Style Directives
+
+Override CSS or Tailwind classes for specific elements per slide:
+
+```markdown
+[.title:shadow: 2px 2px 4px black]
+[.subtitle:color: #cccccc]
+[.text:class: italic]
+
+# My Title
+## Subtitle
+
+Content text here.
+```
+
+#### Syntax
+
+```
+[.element:property: value]
+```
+
+- **element**: `title`, `subtitle`, `text`
+- **property**: Any CSS property or `class` for Tailwind
+- **value**: CSS value or space-separated Tailwind classes
+
+#### Common Properties
+
+| Property | CSS Output | Example |
+|----------|------------|---------|
+| `shadow` | `text-shadow` | `[.title:shadow: 2px 2px 4px black]` |
+| `color` | `color` | `[.text:color: white]` |
+| `size` | `font-size` | `[.title:size: 4rem]` |
+| `weight` | `font-weight` | `[.subtitle:weight: 300]` |
+| `class` | Tailwind classes | `[.text:class: italic underline]` |
+| Any CSS | Direct CSS | `[.title:letter-spacing: 0.1em]` |

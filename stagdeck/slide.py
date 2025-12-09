@@ -9,6 +9,30 @@ if TYPE_CHECKING:
 
 
 @dataclass
+class SlideRegion:
+    """📦 A region within a multi-region slide.
+    
+    Each region has an optional image and content that are displayed together.
+    Regions are laid out horizontally or vertically based on the layout direction.
+    
+    :ivar image: Background image URL for this region (or '').
+    :ivar modifiers: Raw modifier string from markdown (e.g., "blur:8 overlay:0.5 left").
+    :ivar content: Markdown content for this region.
+    :ivar title: Optional title extracted from content.
+    :ivar subtitle: Optional subtitle extracted from content.
+    :ivar position: Background position hint ('left', 'right', 'top', 'bottom', '').
+    :ivar theme_context: ThemeContext for this region. Falls back to slide's theme if not set.
+    """
+    image: str = ''
+    modifiers: str = ''  # Raw modifier string for ImageView
+    content: str = ''
+    title: str = ''
+    subtitle: str = ''
+    position: str = ''  # For background-position alignment
+    theme_context: 'ThemeContext | None' = None
+
+
+@dataclass
 class Slide:
     """🎴 Represents a single slide in a presentation.
     
@@ -23,8 +47,10 @@ class Slide:
     :ivar notes: Speaker notes (not displayed during presentation).
     :ivar builder: Optional custom builder function for complex layouts.
     :ivar background_color: CSS color/gradient for background (if no layout).
-    :ivar style: LayoutStyle defining element colors for this slide.
-    :ivar theme_overrides: Slide-specific theme overrides.
+    :ivar background_position: Position for split layouts ('left', 'right', 'top', 'bottom', or '').
+    :ivar regions: List of SlideRegion for multi-region layouts.
+    :ivar region_direction: Layout direction for regions ('horizontal' or 'vertical').
+    :ivar theme_context: ThemeContext for this slide. Falls back to deck's theme if not set.
     :ivar steps: Total number of steps in this slide (for incremental reveals).
     :ivar step_names: Names for each step. Auto-generated if not provided.
     :ivar step_durations: Duration in seconds for each step. If None, uses deck default.
@@ -40,8 +66,11 @@ class Slide:
     notes: str = ''
     builder: Callable[[int], None] | Callable[[], None] | None = None
     background_color: str = ''
-    style: 'LayoutStyle | None' = None
-    theme_overrides: 'ThemeOverrides | None' = None
+    background_modifiers: str = ''  # Raw modifier string for ImageView
+    background_position: str = ''  # 'left', 'right', 'top', 'bottom', or '' for full
+    regions: list[SlideRegion] = field(default_factory=list)  # Multi-region content
+    region_direction: str = 'horizontal'  # 'horizontal' or 'vertical'
+    theme_context: 'ThemeContext | None' = None  # Slide-level theme, falls back to deck
     steps: int = 1
     step_names: list[str] | None = None
     step_durations: list[float] | None = None
@@ -71,8 +100,8 @@ class Slide:
             >>> slide.override('primary', '#ff0000')
             >>> slide.override('pie_chart.colors', ['#f00', '#0f0'])
         """
-        self._ensure_overrides()
-        self.theme_overrides.set(key, value)
+        self._ensure_theme_context()
+        self.theme_context.slide_overrides.set(key, value)
         return self
     
     def override_palette(self, **kwargs) -> 'Slide':
@@ -81,16 +110,16 @@ class Slide:
         Example:
             >>> slide.override_palette(primary='#ff0000', accent='#00ff00')
         """
-        self._ensure_overrides()
+        self._ensure_theme_context()
         for key, value in kwargs.items():
-            self.theme_overrides.palette[key] = value
+            self.theme_context.slide_overrides.palette[key] = value
         return self
     
-    def _ensure_overrides(self) -> None:
-        """Ensure theme_overrides exists."""
-        if self.theme_overrides is None:
-            from .theme import ThemeOverrides
-            self.theme_overrides = ThemeOverrides()
+    def _ensure_theme_context(self) -> None:
+        """Ensure theme context exists."""
+        if self.theme_context is None:
+            from .theme import ThemeContext
+            self.theme_context = ThemeContext()
     
     def get_style(
         self,
@@ -111,13 +140,18 @@ class Slide:
         """
         from .theme import LayoutStyle
         
-        # Use slide's own style if set
-        if self.style is not None:
-            return self.style
+        # Use slide's theme to get style if set
+        if self.theme_context is not None:
+            # Get layout style from theme context
+            layout = self.theme_context.get('layouts.content')
+            if layout is not None:
+                return layout
         
-        # Use master layout's style if available
-        if master_slide is not None and master_slide.style is not None:
-            return master_slide.style
+        # Use master layout's theme if available
+        if master_slide is not None and master_slide.theme_context is not None:
+            layout = master_slide.theme_context.get('layouts.content')
+            if layout is not None:
+                return layout
         
         # Use deck's default style if available
         if deck is not None and deck.default_style is not None:

@@ -82,23 +82,23 @@ class TestSlideThemeOverrides:
         slide = Slide(title='Test')
         slide.override('primary', '#ff0000')
         
-        assert slide.theme_overrides is not None
-        assert slide.theme_overrides.get('primary') == '#ff0000'
+        assert slide.theme_context is not None
+        assert slide.theme_context.slide_overrides.get('primary') == '#ff0000'
     
     def test_slide_override_palette(self):
         """Set multiple palette overrides on slide."""
         slide = Slide(title='Test')
         slide.override_palette(primary='#ff0000', accent='#00ff00')
         
-        assert slide.theme_overrides.get('primary') == '#ff0000'
-        assert slide.theme_overrides.get('accent') == '#00ff00'
+        assert slide.theme_context.slide_overrides.get('primary') == '#ff0000'
+        assert slide.theme_context.slide_overrides.get('accent') == '#00ff00'
     
     def test_slide_override_component(self):
         """Set component override on slide."""
         slide = Slide(title='Test')
         slide.override('pie_chart.colors', ['#f00', '#0f0', '#00f'])
         
-        assert slide.theme_overrides.get('pie_chart.colors') == ['#f00', '#0f0', '#00f']
+        assert slide.theme_context.slide_overrides.get('pie_chart.colors') == ['#f00', '#0f0', '#00f']
     
     def test_slide_chaining(self):
         """Test method chaining on slide."""
@@ -106,8 +106,8 @@ class TestSlideThemeOverrides:
                  .override('primary', '#ff0000')
                  .override('pie_chart.colors', ['#f00']))
         
-        assert slide.theme_overrides.get('primary') == '#ff0000'
-        assert slide.theme_overrides.get('pie_chart.colors') == ['#f00']
+        assert slide.theme_context.slide_overrides.get('primary') == '#ff0000'
+        assert slide.theme_context.slide_overrides.get('pie_chart.colors') == ['#f00']
 
 
 class TestDeckAddWithOverrides:
@@ -122,7 +122,8 @@ class TestDeckAddWithOverrides:
         )
         
         slide = deck.slides[0]
-        assert slide.theme_overrides.get('primary') == '#ff0000'
+        assert slide.theme_context is not None
+        assert slide.theme_context.slide_overrides.get('primary') == '#ff0000'
     
     def test_add_slide_with_component_overrides(self):
         """Add slide with component overrides."""
@@ -136,8 +137,8 @@ class TestDeckAddWithOverrides:
         )
         
         slide = deck.slides[0]
-        assert slide.theme_overrides.get('pie_chart.colors') == ['#ff6384', '#36a2eb']
-        assert slide.theme_overrides.get('pie_chart.stroke') == '#ffffff'
+        assert slide.theme_context.slide_overrides.get('pie_chart.colors') == ['#ff6384', '#36a2eb']
+        assert slide.theme_context.slide_overrides.get('pie_chart.stroke') == '#ffffff'
     
     def test_modify_slide_after_add(self):
         """Modify slide overrides after adding to deck."""
@@ -146,7 +147,7 @@ class TestDeckAddWithOverrides:
         
         deck.slides[0].override('primary', '#ff0000')
         
-        assert deck.slides[0].theme_overrides.get('primary') == '#ff0000'
+        assert deck.slides[0].theme_context.slide_overrides.get('primary') == '#ff0000'
 
 
 class TestThemeResolutionOrder:
@@ -165,8 +166,8 @@ class TestThemeResolutionOrder:
         
         # Apply slide overrides to context
         slide = deck.slides[0]
-        if slide.theme_overrides:
-            deck.theme_context.push_slide_overrides(slide.theme_overrides)
+        if slide.theme_context:
+            deck.theme_context.push_slide_overrides(slide.theme_context.slide_overrides)
         
         assert deck.theme_context.get('primary') == '#slide_color'
     

@@ -179,14 +179,15 @@
     opacity: 0.9;
 }
 
-/* Images - responsive within content */
+/* Images - responsive within content, scales with slide */
 .nicegui-markdown img {
     max-width: 100%;
-    max-height: 60vh;
+    max-height: 500px;  /* Fixed pixels - will scale with CSS transform */
     height: auto;
     border-radius: 8px;
     margin: 1em auto;
     display: block;
+    object-fit: contain;
 }
 
 /* Paragraphs */

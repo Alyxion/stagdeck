@@ -435,3 +435,85 @@ Common slide layouts that combine components:
 - [ ] video, iframe
 - [ ] animations
 - [ ] custom shapes
+
+---
+
+## 10. Content Element Classes (Implemented)
+
+StagDeck provides content element classes for rendering markdown with explicit size control.
+
+### 10.1 Base Class
+
+```python
+from stagdeck.components import ContentElement, REM_TO_PX_FACTOR
+
+class ContentElement(ABC):
+    """Base class for all content elements."""
+    
+    def __init__(self, content: str, font_size: float = 1.8):
+        self.content = content
+        self.font_size = font_size
+    
+    @property
+    def px_size(self) -> float:
+        """Convert rem to pixels (rem × 20)."""
+        return self.font_size * REM_TO_PX_FACTOR
+    
+    @abstractmethod
+    async def build(self) -> None:
+        """Build the content element UI."""
+        pass
+```
+
+### 10.2 Available Elements
+
+| Class | Purpose | Default Font Size |
+|-------|---------|-------------------|
+| `TableElement` | Markdown tables | 1.8rem |
+| `BulletListElement` | Bullet lists (- or *) | 1.8rem |
+| `NumberedListElement` | Numbered lists (1. 2.) | 1.8rem |
+| `CodeBlockElement` | Code blocks (```) | 1.4rem |
+| `BlockquoteElement` | Blockquotes (>) | 1.8rem |
+| `ParagraphElement` | Plain text/paragraphs | 1.8rem |
+| `MixedContentElement` | Mixed markdown | 1.8rem |
+
+### 10.3 Usage
+
+```python
+from stagdeck.components import TableElement
+
+# Create element
+table = TableElement(
+    content='| A | B |\n|---|---|\n| 1 | 2 |',
+    font_size=2.0,
+)
+
+# Build UI (async)
+await table.build()
+```
+
+### 10.4 Convenience Functions
+
+For simpler usage, async convenience functions are available:
+
+```python
+from stagdeck.components import render_table, render_bullet_list
+
+await render_table('| A | B |', font_size=1.8)
+await render_bullet_list('- Item 1\n- Item 2', font_size=1.8)
+```
+
+### 10.5 File Structure
+
+```
+stagdeck/components/content_elements/
+├── __init__.py          # Package exports
+├── base.py              # ContentElement, ContentStyle, REM_TO_PX_FACTOR
+├── table.py             # TableElement
+├── bullet_list.py       # BulletListElement
+├── numbered_list.py     # NumberedListElement
+├── code_block.py        # CodeBlockElement
+├── blockquote.py        # BlockquoteElement
+├── paragraph.py         # ParagraphElement
+└── mixed_content.py     # MixedContentElement
+```

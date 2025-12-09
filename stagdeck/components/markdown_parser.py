@@ -107,8 +107,15 @@ class MarkdownParser:
     FRONTMATTER_PATTERN = re.compile(r'^---\s*\n(.*?)\n---\s*\n', re.DOTALL)
     SLIDE_SEPARATOR = re.compile(r'\n---\s*\n')
     HEADING_PATTERN = re.compile(r'^(#{1,6})\s+(.+)$', re.MULTILINE)
+    H1_PATTERN = re.compile(r'^#\s+(.+)$', re.MULTILINE)
+    H2_PATTERN = re.compile(r'^##\s+(.+)$', re.MULTILINE)
     CODE_BLOCK_PATTERN = re.compile(r'```(\w*)\n(.*?)```', re.DOTALL)
     IMAGE_PATTERN = re.compile(r'!\[([^\]]*)\]\(([^)]+)\)(?:\s*\{([^}]+)\})?')
+    # Background image pattern: ![background](color_or_url) or ![](url) at start
+    BACKGROUND_IMAGE_PATTERN = re.compile(
+        r'^!\[(background|fit|left|right|original)?[^\]]*\]\(([^)]+)\)\s*$',
+        re.MULTILINE
+    )
     TABLE_PATTERN = re.compile(r'^\|(.+)\|\s*\n\|[-:\s|]+\|\s*\n((?:\|.+\|\s*\n?)+)', re.MULTILINE)
     QUOTE_PATTERN = re.compile(r'^>\s*(.+)$', re.MULTILINE)
     BULLET_PATTERN = re.compile(r'^(\s*)[-*+]\s+(.+)$', re.MULTILINE)
@@ -412,3 +419,373 @@ class MarkdownParser:
             return SlideContentType.TITLE_BULLETS
         
         return SlideContentType.TITLE_CONTENT
+    
+    def parse_slide_markdown(self, markdown: str) -> dict[str, Any]:
+        """Parse a single slide's markdown into components.
+        
+        Extracts title, subtitle, background, and content from markdown.
+        Follows Deckset conventions:
+        - `# Heading` = title
+        - `## Heading` immediately after title = subtitle
+        - `![background](color_or_url)` = background
+        - `![](image.jpg)` at start (no text before) = background image
+        - `![inline](image.jpg)` = inline image (kept in content)
+        - Everything else = content
+        
+        :param markdown: Markdown source for a single slide.
+        :return: Dict with keys: title, subtitle, background, content, images
+        
+        Example:
+            >>> parser = MarkdownParser()
+            >>> result = parser.parse_slide_markdown('''
+            ... ![background](#1a1a2e)
+            ... 
+            ... # My Title
+            ... ## My Subtitle
+            ... 
+            ... Some content here.
+            ... ''')
+            >>> result['title']
+            'My Title'
+            >>> result['background']
+            '#1a1a2e'
+        """
+        result: dict[str, Any] = {
+            'title': '',
+            'subtitle': '',
+            'background': '',
+            'background_modifiers': '',  # Raw modifier string for ImageView
+            'background_position': '',  # 'left', 'right', 'top', 'bottom', or '' for full
+            'overlay_opacity': None,  # None = no overlay, 0.0-1.0 for opacity
+            'blur_radius': None,  # None = no blur, value in pixels
+            'content': '',
+            'images': [],
+            'notes': '',
+            'text_style': {},  # Slide-level text style overrides
+        }
+        
+        lines = markdown.strip().split('\n')
+        content_lines: list[str] = []
+        found_title = False
+        found_subtitle = False
+        title_line_idx = -1
+        
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            stripped = line.strip()
+            
+            # Check for presenter notes
+            if stripped.startswith('^'):
+                if result['notes']:
+                    result['notes'] += '\n'
+                result['notes'] += stripped[1:].strip()
+                i += 1
+                continue
+            
+            # Check for element style directives: [.element:property: value]
+            # Examples: [.title:shadow: 2px 2px 4px black], [.text:color: white], [.subtitle:class: italic]
+            style_match = re.match(r'^\[\.(\w+):(\w+):\s*(.+)\]$', stripped)
+            if style_match:
+                element = style_match.group(1).lower()  # title, subtitle, text, etc.
+                prop = style_match.group(2).lower()     # shadow, color, class, etc.
+                value = style_match.group(3).strip()
+                
+                # Initialize element dict if needed
+                if element not in result['text_style']:
+                    result['text_style'][element] = {}
+                result['text_style'][element][prop] = value
+                i += 1
+                continue
+            
+            # Check for background image: ![modifiers](url)
+            # Modifiers: background, left, right, top, bottom, overlay, overlay:N, blur, blur:N
+            # Use a more permissive pattern that handles nested parentheses (for gradients)
+            bg_match = re.match(r'^!\[([^\]]*)\]\((.+)\)\s*$', stripped)
+            if bg_match:
+                alt_text = bg_match.group(1).lower()
+                value = bg_match.group(2)
+                
+                # Parse modifiers from alt text
+                modifiers = alt_text.split()
+                
+                # Position modifiers
+                is_background = 'background' in modifiers
+                is_left = any(m == 'left' or m.startswith('left:') for m in modifiers)
+                is_right = any(m == 'right' or m.startswith('right:') for m in modifiers)
+                is_top = any(m == 'top' or m.startswith('top:') for m in modifiers)
+                is_bottom = any(m == 'bottom' or m.startswith('bottom:') for m in modifiers)
+                is_split = is_left or is_right or is_top or is_bottom
+                
+                # Filter modifiers: overlay, overlay:N, blur, blur:N
+                overlay_opacity = None
+                blur_radius = None
+                
+                for mod in modifiers:
+                    if mod == 'overlay':
+                        overlay_opacity = -1.0  # Sentinel for "use theme default"
+                    elif mod.startswith('overlay:'):
+                        try:
+                            overlay_opacity = float(mod.split(':')[1])
+                        except (ValueError, IndexError):
+                            overlay_opacity = -1.0
+                    elif mod == 'blur':
+                        blur_radius = -1.0  # Sentinel for "use theme default"
+                    elif mod.startswith('blur:'):
+                        try:
+                            blur_radius = float(mod.split(':')[1])
+                        except (ValueError, IndexError):
+                            blur_radius = -1.0
+                
+                # If it's explicitly "background" or positioned, or at start with no content
+                if is_background or is_split or (not content_lines and not found_title and not alt_text.startswith('inline')):
+                    # Check if it's a color (starts with # or contains gradient)
+                    if value.startswith('#') or 'gradient' in value.lower():
+                        result['background'] = value
+                    else:
+                        # It's an image URL
+                        result['background'] = f'url({value})'
+                    
+                    # Store raw modifiers string for ImageView
+                    result['background_modifiers'] = alt_text
+                    
+                    # Set filter values (for backward compatibility)
+                    result['overlay_opacity'] = overlay_opacity
+                    result['blur_radius'] = blur_radius
+                    
+                    # Set position for split layouts
+                    if is_left:
+                        result['background_position'] = 'left'
+                    elif is_right:
+                        result['background_position'] = 'right'
+                    elif is_top:
+                        result['background_position'] = 'top'
+                    elif is_bottom:
+                        result['background_position'] = 'bottom'
+                    
+                    i += 1
+                    continue
+                else:
+                    # It's an inline/positioned image, keep track of it
+                    result['images'].append({
+                        'modifier': alt_text,
+                        'url': value,
+                        'line': i,
+                    })
+                    content_lines.append(line)
+                    i += 1
+                    continue
+            
+            # Check for inline images ![inline](...) - keep in content
+            inline_match = re.match(r'^!\[inline[^\]]*\]\(([^)]+)\)', stripped)
+            if inline_match:
+                content_lines.append(line)
+                i += 1
+                continue
+            
+            # Check for H1 title
+            h1_match = re.match(r'^#\s+(.+)$', stripped)
+            if h1_match and not found_title:
+                result['title'] = h1_match.group(1).strip()
+                found_title = True
+                title_line_idx = i
+                i += 1
+                
+                # Check if next non-empty line is H2 (subtitle)
+                while i < len(lines) and not lines[i].strip():
+                    i += 1
+                
+                if i < len(lines):
+                    h2_match = re.match(r'^##\s+(.+)$', lines[i].strip())
+                    if h2_match:
+                        result['subtitle'] = h2_match.group(1).strip()
+                        found_subtitle = True
+                        i += 1
+                continue
+            
+            # Regular content line
+            content_lines.append(line)
+            i += 1
+        
+        # Join remaining content
+        result['content'] = '\n'.join(content_lines).strip()
+        
+        return result
+    
+    def parse_multi_region_markdown(self, markdown: str) -> dict[str, Any]:
+        """Parse markdown with multiple image/content regions.
+        
+        Splits markdown into regions, where each region starts with an image tag.
+        Supports horizontal (left/right or multiple columns) and vertical (top/bottom) layouts.
+        
+        Example horizontal split:
+            ![left](image1.jpg)
+            # Left Title
+            Content for left side
+            
+            ![right](image2.jpg)
+            # Right Title
+            Content for right side
+        
+        Example triple column:
+            ![](image1.jpg)
+            * Point A
+            ![](image2.jpg)
+            # Topic
+            ![](image3.jpg)
+            ## Other topic
+        
+        :param markdown: Markdown source with multiple regions.
+        :return: Dict with 'regions' list and 'direction' ('horizontal' or 'vertical').
+        """
+        result: dict[str, Any] = {
+            'regions': [],
+            'direction': 'horizontal',
+            'notes': '',
+        }
+        
+        lines = markdown.strip().split('\n')
+        
+        # First pass: detect if this is a multi-region slide
+        image_pattern = re.compile(r'^!\[([^\]]*)\]\((.+)\)\s*$')
+        image_lines: list[tuple[int, str, str]] = []  # (line_idx, modifiers, url)
+        
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            # Skip presenter notes
+            if stripped.startswith('^'):
+                if result['notes']:
+                    result['notes'] += '\n'
+                result['notes'] += stripped[1:].strip()
+                continue
+            
+            match = image_pattern.match(stripped)
+            if match:
+                modifiers = match.group(1).lower()
+                url = match.group(2)
+                # Skip inline images
+                if 'inline' not in modifiers:
+                    image_lines.append((i, modifiers, url))
+        
+        # If 0 or 1 images, use standard single-region parsing
+        if len(image_lines) <= 1:
+            single = self.parse_slide_markdown(markdown)
+            if single.get('background'):
+                result['regions'] = [{
+                    'image': single['background'],
+                    'overlay_opacity': single['overlay_opacity'],
+                    'blur_radius': single['blur_radius'],
+                    'content': single['content'],
+                    'title': single['title'],
+                    'subtitle': single['subtitle'],
+                }]
+            else:
+                result['regions'] = [{
+                    'image': '',
+                    'overlay_opacity': None,
+                    'blur_radius': None,
+                    'content': single['content'],
+                    'title': single['title'],
+                    'subtitle': single['subtitle'],
+                }]
+            result['notes'] = single.get('notes', '')
+            # Detect direction from position modifiers
+            if single.get('background_position') in ('top', 'bottom'):
+                result['direction'] = 'vertical'
+            return result
+        
+        # Determine direction from modifiers
+        has_left_right = any('left' in m or 'right' in m for _, m, _ in image_lines)
+        has_top_bottom = any('top' in m or 'bottom' in m for _, m, _ in image_lines)
+        
+        if has_top_bottom and not has_left_right:
+            result['direction'] = 'vertical'
+        else:
+            result['direction'] = 'horizontal'
+        
+        # Split content into regions based on image positions
+        # Each region starts at an image line and ends before the next image
+        for idx, (line_idx, modifiers, url) in enumerate(image_lines):
+            # Find end of this region (start of next image or end of file)
+            if idx + 1 < len(image_lines):
+                end_idx = image_lines[idx + 1][0]
+            else:
+                end_idx = len(lines)
+            
+            # Extract content lines for this region (excluding the image line)
+            region_lines = []
+            for j in range(line_idx + 1, end_idx):
+                stripped = lines[j].strip()
+                # Skip presenter notes (already extracted)
+                if not stripped.startswith('^'):
+                    region_lines.append(lines[j])
+            
+            region_content = '\n'.join(region_lines).strip()
+            
+            # Parse title/subtitle from region content
+            region_title = ''
+            region_subtitle = ''
+            final_content_lines = []
+            
+            content_started = False
+            for line in region_lines:
+                stripped = line.strip()
+                
+                # Check for H1 title
+                h1_match = re.match(r'^#\s+(.+)$', stripped)
+                if h1_match and not region_title and not content_started:
+                    region_title = h1_match.group(1).strip()
+                    continue
+                
+                # Check for H2 subtitle (only right after title)
+                h2_match = re.match(r'^##\s+(.+)$', stripped)
+                if h2_match and region_title and not region_subtitle and not content_started:
+                    if not stripped or h2_match:
+                        region_subtitle = h2_match.group(1).strip()
+                        continue
+                
+                # Everything else is content
+                if stripped:
+                    content_started = True
+                final_content_lines.append(line)
+            
+            # Determine image URL
+            is_color = url.startswith('#') or 'gradient' in url.lower()
+            image_url = url if is_color else f'url({url})'
+            
+            # Parse filter and position modifiers from this region's modifiers
+            mod_list = modifiers.split()
+            overlay_opacity = None
+            blur_radius = None
+            position = ''  # left, right, top, bottom
+            
+            for mod in mod_list:
+                if mod == 'overlay':
+                    overlay_opacity = -1.0  # Sentinel for "use theme default"
+                elif mod.startswith('overlay:'):
+                    try:
+                        overlay_opacity = float(mod.split(':')[1])
+                    except (ValueError, IndexError):
+                        overlay_opacity = -1.0
+                elif mod == 'blur':
+                    blur_radius = -1.0  # Sentinel for "use theme default"
+                elif mod.startswith('blur:'):
+                    try:
+                        blur_radius = float(mod.split(':')[1])
+                    except (ValueError, IndexError):
+                        blur_radius = -1.0
+                elif mod in ('left', 'right', 'top', 'bottom'):
+                    position = mod
+            
+            result['regions'].append({
+                'image': image_url,
+                'modifiers': modifiers,  # Raw modifier string for ImageView
+                'overlay_opacity': overlay_opacity,
+                'blur_radius': blur_radius,
+                'position': position,
+                'content': '\n'.join(final_content_lines).strip(),
+                'title': region_title,
+                'subtitle': region_subtitle,
+            })
+        
+        return result

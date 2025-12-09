@@ -240,8 +240,16 @@
 
   "slide": {
     "background": "${bg}",
-    "title": { "color": "${heading}", "size": 60, "weight": "bold" },
-    "subtitle": { "color": "${text_faint}", "size": 30 },
-    "text": { "color": "${text}", "size": 20 }
+    "title": { "color": "#4b5563", "size": 60, "weight": "bold" },
+    "subtitle": { "color": "#6b7280", "size": 30 },
+    "text": { "color": "#1f2937", "size": 20 },
+    "bold": { "color": "#3b82f6" },
+    "overlay": { "color": "rgba(0, 0, 0, 0.5)", "opacity": 0.5 },
+    "blur": { "radius": 4 },
+    "split_background": { "color": "${bg_inverse}" },
+    "split_title": { "color": "#c4d4e4", "size": 50, "weight": "bold" },
+    "split_subtitle": { "color": "#a5b4c4", "size": 30 },
+    "split_text": { "color": "#ffffff", "size": 32 },
+    "split_bold": { "color": "#3b82f6" }
   }
 }
