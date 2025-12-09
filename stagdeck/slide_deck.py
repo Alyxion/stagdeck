@@ -28,6 +28,7 @@ class SlideDeck:
     :ivar default_transition_duration: Default transition animation duration in seconds.
     :ivar theme_context: Theme context for cascading theme resolution.
     :ivar media_folders: Registered media folders (url_path -> local_path).
+    :ivar source_files: Markdown files loaded via add_from_file() for hot-reload.
     """
     title: str = 'Presentation'
     master: 'SlideDeck | None' = None
@@ -41,6 +42,7 @@ class SlideDeck:
     default_transition_duration: float = 0.5
     theme_context: 'ThemeContext | None' = None
     media_folders: dict[str, Path] = field(default_factory=dict)
+    source_files: list[Path] = field(default_factory=list)
     
     @property
     def aspect_ratio(self) -> float:
@@ -208,6 +210,9 @@ class SlideDeck:
             parsed_direction = multi.get('direction', 'horizontal')
             regions_data = multi.get('regions', [])
             
+            # Get name from multi-region parse (applies to all cases)
+            parsed_name = multi.get('name', '')
+            
             if len(regions_data) > 1:
                 # Multi-region slide
                 for r in regions_data:
@@ -243,6 +248,7 @@ class SlideDeck:
                 parsed_background_modifiers = parsed.get('background_modifiers', '')
                 parsed_background_position = parsed.get('background_position', '')
                 parsed_notes = parsed.get('notes', '')
+                parsed_name = parsed.get('name', '')
                 
                 # Collect style overrides from parsed markdown
                 if parsed.get('overlay_opacity') is not None:
@@ -251,6 +257,8 @@ class SlideDeck:
                     parsed_style_overrides['blur'] = parsed['blur_radius']
                 if parsed.get('text_style'):
                     parsed_style_overrides.update(parsed['text_style'])
+        else:
+            parsed_name = ''
         
         # Explicit params override parsed values
         final_title = title if title else parsed_title
@@ -261,7 +269,8 @@ class SlideDeck:
         # Background: explicit > background_color (alias) > parsed
         final_background = background or background_color or parsed_background
         
-        slide_name = name if name else f'slide_{len(self.slides)}'
+        # Name: explicit > parsed from [name: ...] > auto-generated
+        slide_name = name if name else (parsed_name if parsed_name else f'slide_{len(self.slides)}')
         slide_layout = layout if layout else self.default_layout
         
         # Build data dict from explicit params and kwargs
@@ -311,6 +320,161 @@ class SlideDeck:
             transition_duration=transition_duration if transition_duration is not None else self.default_transition_duration,
             data=data,
         ))
+        return self
+    
+    def add_from_file(
+        self,
+        path: str | Path,
+        separator: str = '---',
+    ) -> 'SlideDeck':
+        """📄 Load slides from a markdown file.
+        
+        The file can contain multiple slides separated by `---` (or custom separator).
+        Each slide can use `[name: slidename]` to assign a name for later reference.
+        
+        Example markdown file:
+        ```markdown
+        [name: intro]
+        ![background](#1a1a2e)
+        # Welcome
+        
+        ---
+        
+        [name: features]
+        # Features
+        - Item 1
+        - Item 2
+        
+        ---
+        
+        [name: chart_placeholder]
+        # Chart
+        (This slide will be replaced by Python)
+        ```
+        
+        :param path: Path to the markdown file.
+        :param separator: Slide separator (default '---').
+        :return: Self for chaining.
+        :raises FileNotFoundError: If file doesn't exist.
+        """
+        path = Path(path).resolve()
+        if not path.exists():
+            raise FileNotFoundError(f"Markdown file not found: {path}")
+        
+        # Track source file for hot-reload
+        if path not in self.source_files:
+            self.source_files.append(path)
+        
+        content = path.read_text(encoding='utf-8')
+        
+        # Split by separator (must be on its own line)
+        import re
+        slides_md = re.split(rf'^{re.escape(separator)}\s*$', content, flags=re.MULTILINE)
+        
+        for slide_md in slides_md:
+            slide_md = slide_md.strip()
+            if slide_md:
+                self.add(slide_md)
+        
+        return self
+    
+    def insert(
+        self,
+        markdown: str = '',
+        *,
+        before: str = '',
+        after: str = '',
+        **kwargs,
+    ) -> 'SlideDeck':
+        """➕ Insert a slide before or after a named slide.
+        
+        Either `before` or `after` must be specified (not both).
+        
+        Example:
+        ```python
+        # Load markdown slides
+        deck.add_from_file('slides.md')
+        
+        # Insert a Python slide after 'features'
+        deck.insert('''
+        # Dynamic Chart
+        ''', after='features')
+        
+        # Insert before 'conclusion'
+        deck.insert(title='Extra Slide', before='conclusion')
+        ```
+        
+        :param markdown: Markdown source for the slide.
+        :param before: Insert before the slide with this name.
+        :param after: Insert after the slide with this name.
+        :param kwargs: Additional parameters passed to add().
+        :return: Self for chaining.
+        :raises ValueError: If neither/both before/after specified, or name not found.
+        """
+        if bool(before) == bool(after):
+            raise ValueError("Exactly one of 'before' or 'after' must be specified")
+        
+        target_name = before or after
+        target_idx = self.get_slide_index(target_name)
+        
+        if target_idx is None:
+            raise ValueError(f"Slide not found: '{target_name}'")
+        
+        # Calculate insertion index
+        insert_idx = target_idx if before else target_idx + 1
+        
+        # Add slide to end first (reuse add() logic)
+        self.add(markdown, **kwargs)
+        
+        # Move from end to insertion point
+        slide = self.slides.pop()
+        self.slides.insert(insert_idx, slide)
+        
+        return self
+    
+    def replace(
+        self,
+        name: str,
+        markdown: str = '',
+        **kwargs,
+    ) -> 'SlideDeck':
+        """🔄 Replace a named slide with new content.
+        
+        Useful for replacing placeholder/dummy slides with Python-generated content.
+        
+        Example:
+        ```python
+        # Markdown file has: [name: chart_placeholder]
+        deck.add_from_file('slides.md')
+        
+        # Replace with actual chart
+        deck.replace('chart_placeholder', '''
+        # Sales Chart
+        ''', builder=my_chart_builder)
+        ```
+        
+        :param name: Name of the slide to replace.
+        :param markdown: Markdown source for the new slide.
+        :param kwargs: Additional parameters passed to add().
+        :return: Self for chaining.
+        :raises ValueError: If slide name not found.
+        """
+        target_idx = self.get_slide_index(name)
+        
+        if target_idx is None:
+            raise ValueError(f"Slide not found: '{name}'")
+        
+        # Add new slide to end (reuse add() logic)
+        # Preserve the name unless explicitly overridden
+        if 'name' not in kwargs:
+            kwargs['name'] = name
+        self.add(markdown, **kwargs)
+        
+        # Remove old slide and move new one to its position
+        del self.slides[target_idx]
+        slide = self.slides.pop()
+        self.slides.insert(target_idx, slide)
+        
         return self
     
     def get_layout(self, layout_name: str) -> Slide | None:

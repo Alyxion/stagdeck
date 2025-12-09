@@ -1,11 +1,15 @@
 """🎬 DeckViewer - UI component for presenting slide decks."""
 
 from pathlib import Path
+from typing import TYPE_CHECKING, Callable
 
 from nicegui import ui
 
 from .slide import Slide
 from .slide_deck import SlideDeck
+
+if TYPE_CHECKING:
+    from .file_watcher import FileWatcher
 
 
 class DeckViewer:
@@ -20,19 +24,28 @@ class DeckViewer:
     
     _static_assets_initialized: bool = False
     
-    def __init__(self, deck: SlideDeck, current_index: int = 0, current_step: int = 0) -> None:
+    def __init__(
+        self,
+        deck: SlideDeck,
+        current_index: int = 0,
+        current_step: int = 0,
+        deck_factory: Callable[[], SlideDeck] | None = None,
+    ) -> None:
         """
         Initialize the viewer.
         
         :param deck: The SlideDeck to display.
         :param current_index: Starting slide index.
         :param current_step: Starting step index.
+        :param deck_factory: Optional factory for hot-reload support.
         """
         self.deck = deck
         self.current_index = current_index
         self.current_step = current_step
         self._slide_frame: ui.element | None = None
         self._slide_counter: ui.label | None = None
+        self._deck_factory = deck_factory
+        self._file_watcher: 'FileWatcher | None' = None
     
     @property
     def current_slide(self) -> Slide | None:
@@ -146,6 +159,36 @@ class DeckViewer:
         
         self.go_to_slide(index, step)
         return True
+    
+    def reload(self) -> None:
+        """🔄 Reload the deck from source files and refresh the view.
+        
+        Used for hot-reload when markdown files change.
+        Preserves the current slide position if possible.
+        """
+        if self._deck_factory is None:
+            return
+        
+        # Remember current position
+        current_name = self.current_slide.name if self.current_slide else None
+        current_step = self.current_step
+        
+        # Reload deck
+        self.deck = self._deck_factory()
+        
+        # Try to restore position by slide name
+        if current_name:
+            index = self.deck.get_slide_index(current_name)
+            if index is not None:
+                self.current_index = index
+                slide = self.deck.slides[index]
+                self.current_step = min(current_step, slide.steps - 1)
+            else:
+                # Slide was removed, clamp to valid range
+                self.current_index = min(self.current_index, len(self.deck.slides) - 1)
+                self.current_step = 0
+        
+        self._update_view()
     
     # 🎨 UI rendering methods
     
@@ -283,19 +326,12 @@ class DeckViewer:
             from .utils.image_processing import apply_gaussian_blur
             
             # Security: resolve the path and check it's within a registered media folder
-            # For now, we'll look for the image in registered media folders
-            image_path = None
-            
-            for url_prefix, local_dir in cls._registered_media_folders_map.items():
-                if path.startswith(url_prefix):
-                    relative = path[len(url_prefix):].lstrip('/')
-                    candidate = Path(local_dir) / relative
-                    if candidate.exists() and candidate.is_file():
-                        image_path = candidate
-                        break
+            image_path = cls._resolve_media_path(path)
             
             if image_path is None:
                 return Response(content="Image not found", status_code=404)
+            
+            # Note: Hot-reload registration happens in ImageView._register_for_hot_reload()
             
             try:
                 blurred_bytes = apply_gaussian_blur(image_path, blur_radius=radius)
@@ -305,6 +341,57 @@ class DeckViewer:
     
     # Map of URL paths to local paths for blur endpoint
     _registered_media_folders_map: dict[str, Path] = {}
+    
+    @classmethod
+    def _resolve_media_path(cls, url_path: str) -> Path | None:
+        """Resolve a URL path to a local file path.
+        
+        :param url_path: URL path (e.g., '/media/image.jpg').
+        :return: Resolved local Path or None if not found.
+        """
+        for url_prefix, local_dir in cls._registered_media_folders_map.items():
+            if url_path.startswith(url_prefix):
+                relative = url_path[len(url_prefix):].lstrip('/')
+                candidate = Path(local_dir) / relative
+                if candidate.exists() and candidate.is_file():
+                    return candidate
+        return None
+    
+    def register_watched_file(self, url_path: str) -> None:
+        """Register a media file for hot-reload watching.
+        
+        Components should call this when they use a media file.
+        
+        :param url_path: URL path to the media file.
+        """
+        if self._file_watcher is None:
+            return
+        
+        resolved = self._resolve_media_path(url_path)
+        if resolved:
+            self._file_watcher.watch(resolved)
+    
+    @classmethod
+    def get_current(cls) -> 'DeckViewer | None':
+        """Get the current DeckViewer from NiceGUI context.
+        
+        Components can use this to register files for hot-reload.
+        
+        :return: Current viewer or None if not in a viewer context.
+        """
+        try:
+            client = ui.context.client
+            return getattr(client, '_stagdeck_viewer', None)
+        except Exception:
+            return None
+    
+    def _set_as_current(self) -> None:
+        """Set this viewer as the current one in NiceGUI context."""
+        try:
+            client = ui.context.client
+            client._stagdeck_viewer = self
+        except Exception:
+            pass
     
     def _init_from_query_params(self) -> None:
         """🔍 Initialize slide and step from URL query parameters."""
@@ -344,6 +431,7 @@ class DeckViewer:
     
     def build(self) -> None:
         """🚀 Build the complete presentation UI."""
+        self._set_as_current()
         self._init_from_query_params()
         self._setup_static_assets()
         self._setup_media_folders()

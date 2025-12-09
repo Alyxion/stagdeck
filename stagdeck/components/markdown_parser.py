@@ -462,6 +462,7 @@ class MarkdownParser:
             'images': [],
             'notes': '',
             'text_style': {},  # Slide-level text style overrides
+            'name': '',  # Slide name from [name: ...] directive
         }
         
         lines = markdown.strip().split('\n')
@@ -474,6 +475,13 @@ class MarkdownParser:
         while i < len(lines):
             line = lines[i]
             stripped = line.strip()
+            
+            # Check for slide name directive: [name: slidename]
+            name_match = re.match(r'^\[name:\s*([^\]]+)\]$', stripped, re.IGNORECASE)
+            if name_match:
+                result['name'] = name_match.group(1).strip()
+                i += 1
+                continue
             
             # Check for presenter notes
             if stripped.startswith('^'):
@@ -642,6 +650,7 @@ class MarkdownParser:
             'regions': [],
             'direction': 'horizontal',
             'notes': '',
+            'name': '',  # Slide name from [name: ...] directive
         }
         
         lines = markdown.strip().split('\n')
@@ -650,8 +659,17 @@ class MarkdownParser:
         image_pattern = re.compile(r'^!\[([^\]]*)\]\((.+)\)\s*$')
         image_lines: list[tuple[int, str, str]] = []  # (line_idx, modifiers, url)
         
+        name_pattern = re.compile(r'^\[name:\s*([^\]]+)\]$', re.IGNORECASE)
+        
         for i, line in enumerate(lines):
             stripped = line.strip()
+            
+            # Check for slide name directive
+            name_match = name_pattern.match(stripped)
+            if name_match:
+                result['name'] = name_match.group(1).strip()
+                continue
+            
             # Skip presenter notes
             if stripped.startswith('^'):
                 if result['notes']:
@@ -689,6 +707,7 @@ class MarkdownParser:
                     'subtitle': single['subtitle'],
                 }]
             result['notes'] = single.get('notes', '')
+            result['name'] = single.get('name', '')
             # Detect direction from position modifiers
             if single.get('background_position') in ('top', 'bottom'):
                 result['direction'] = 'vertical'

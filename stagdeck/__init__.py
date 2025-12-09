@@ -4,6 +4,7 @@ from .slide import Slide
 from .slide_deck import SlideDeck
 from .viewer import DeckViewer
 from .app import App
+from .file_watcher import FileWatcher
 from .registry import DeckRegistry, registry, register_deck, get_deck
 from .theme import Theme, ElementStyle, LayoutStyle
 from .renderer import SlideRenderer, setup_render_endpoint
@@ -24,6 +25,7 @@ __all__ = [
     'SlideDeck',
     'DeckViewer',
     'App',
+    'FileWatcher',
     'DeckRegistry',
     'registry',
     'register_deck',

@@ -1,9 +1,12 @@
 """🚀 App - Application lifecycle management for StagDeck."""
 
+import asyncio
+from pathlib import Path
 from typing import Callable
 
-from nicegui import ui
+from nicegui import ui, app
 
+from .file_watcher import FileWatcher
 from .slide_deck import SlideDeck
 from .viewer import DeckViewer
 
@@ -30,6 +33,7 @@ class App:
         path: str = '/',
         enable_render: bool = True,
         render_path: str = '/render',
+        hot_reload: bool = True,
         **kwargs,
     ) -> None:
         """🚀 Run the presentation app.
@@ -42,6 +46,7 @@ class App:
         :param path: URL path for the presentation (default: '/').
         :param enable_render: Enable slide rendering endpoint (requires Selenium).
         :param render_path: URL path for render endpoint (default: '/render').
+        :param hot_reload: Auto-reload when markdown source files change (default: True).
         :param kwargs: Additional arguments passed to ui.run().
         
         Example:
@@ -56,9 +61,24 @@ class App:
             # GET /render?slide=0&step=0&width=1920&height=1080
         """
         @ui.page(path)
-        def presentation_page():
+        async def presentation_page():
             deck = deck_factory()
-            viewer = DeckViewer(deck=deck)
+            viewer = DeckViewer(
+                deck=deck,
+                deck_factory=deck_factory if hot_reload else None,
+            )
+            
+            # Setup hot-reload for this viewer
+            if hot_reload and deck.source_files:
+                watcher = FileWatcher()
+                viewer._file_watcher = watcher
+                
+                for source_file in deck.source_files:
+                    watcher.watch(source_file)
+                
+                watcher.on_change(lambda p: viewer.reload())
+                asyncio.create_task(watcher.start())
+            
             viewer.build()
         
         # Render-only page (no navbar, for screenshot capture)

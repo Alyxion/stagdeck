@@ -330,6 +330,24 @@ class ImageView(MediaView):
         
         return f'background: url({img_url}) {bg_position}/{bg_size} no-repeat;'
     
+    def _register_for_hot_reload(self) -> None:
+        """Register this image's source file for hot-reload watching."""
+        # Skip non-file sources
+        if (self.src.startswith(('#', 'http://', 'https://', 'data:')) or
+            'gradient' in self.src.lower()):
+            return
+        
+        # Extract path from url(...) if present
+        src = self.src
+        if src.startswith('url(') and src.endswith(')'):
+            src = src[4:-1].strip('"\'')
+        
+        # Register via current DeckViewer (has access to media folder mappings)
+        from ..viewer import DeckViewer
+        viewer = DeckViewer.get_current()
+        if viewer:
+            viewer.register_watched_file(src)
+    
     def build_background(
         self,
         container_classes: str = 'absolute inset-0',
@@ -348,6 +366,8 @@ class ImageView(MediaView):
         :param region_count: Total number of regions sharing this image.
         :param region_direction: 'horizontal' or 'vertical' for seamless tiling.
         """
+        self._register_for_hot_reload()
+        
         bg_css = self.get_background_css(
             theme_blur_default=theme_blur_default,
             region_index=region_index,
@@ -370,6 +390,8 @@ class ImageView(MediaView):
             the parent container, working correctly in split layouts (top/bottom,
             left/right) and different region counts.
         """
+        self._register_for_hot_reload()
+        
         ui.image(self.src).style(
             f'max-width: 100%; '
             f'max-height: {max_height}; '

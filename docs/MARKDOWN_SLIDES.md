@@ -197,6 +197,31 @@ Content for slide 1
 Content for slide 2
 ```
 
+### Named Slides
+
+Give slides names for programmatic access using the `[name: ...]` directive:
+
+```markdown
+[name: intro]
+# Introduction
+
+Welcome to the presentation!
+
+---
+
+[name: conclusion]
+# Conclusion
+
+Thank you!
+```
+
+Named slides enable:
+- **Insertion**: Add Python-generated slides before/after named slides
+- **Replacement**: Replace placeholder slides with dynamic content
+- **Navigation**: Jump to slides by name in the viewer
+
+The directive must be on its own line, typically at the start of a slide. Names are case-sensitive and should use `snake_case` or simple identifiers.
+
 ### Headings as Slide Boundaries
 
 Alternatively, treat top-level headings (`#`) as slide dividers:
@@ -624,6 +649,144 @@ Studies show significant improvement[^1].
 
 ---
 
+## Loading Slides from Files
+
+### Basic File Loading
+
+Load slides from a markdown file using `add_from_file()`:
+
+```python
+from pathlib import Path
+from stagdeck import SlideDeck
+
+deck = SlideDeck(title='My Presentation')
+deck.add_from_file(Path('slides.md'))
+```
+
+The file is parsed using `---` as the slide separator by default:
+
+```markdown
+# Slide 1
+Content here.
+
+---
+
+# Slide 2
+More content.
+```
+
+### Custom Separator
+
+Use a different separator if needed:
+
+```python
+deck.add_from_file('slides.md', separator='===')
+```
+
+### Hybrid Workflow: Markdown + Python
+
+Combine markdown files with Python-generated slides for the best of both worlds:
+
+```python
+from pathlib import Path
+from stagdeck import SlideDeck, App
+
+def create_deck():
+    deck = SlideDeck(title='Sales Report')
+    
+    # Load static slides from markdown
+    deck.add_from_file(Path('slides.md'))
+    
+    # Insert a dynamic slide after 'intro'
+    deck.insert('''
+    # Today's Numbers
+    Generated at runtime!
+    ''', after='intro')
+    
+    # Replace a placeholder with a custom builder
+    deck.replace('chart_placeholder', builder=render_sales_chart)
+    
+    return deck
+
+def render_sales_chart(slide):
+    from nicegui import ui
+    # Render dynamic chart here
+    ui.label('Dynamic chart content')
+
+App.run(create_deck)
+```
+
+### Insert Slides
+
+Insert slides before or after named slides:
+
+```python
+# Insert after a named slide
+deck.insert('# New Slide', after='intro')
+
+# Insert before a named slide  
+deck.insert('# Another Slide', before='conclusion')
+
+# With additional options
+deck.insert('# Dynamic', after='data', builder=my_builder)
+```
+
+### Replace Slides
+
+Replace placeholder slides with dynamic content:
+
+```python
+# Replace with new markdown
+deck.replace('placeholder', '# Real Content')
+
+# Replace with a custom builder function
+deck.replace('chart', builder=render_chart)
+
+# The original name is preserved for stable references
+```
+
+---
+
+## Hot Reload
+
+### Automatic Reload on File Changes
+
+When running with `App.run()`, markdown source files are automatically watched for changes. Edit your `slides.md` file and the presentation updates instantly in the browser.
+
+```python
+# Hot reload is enabled by default
+App.run(create_deck, title='My Talk')
+
+# Disable if needed
+App.run(create_deck, hot_reload=False)
+```
+
+### What Gets Watched
+
+- **Markdown files** loaded via `add_from_file()`
+- **Image files** referenced in slides (when using media folders)
+
+### How It Works
+
+1. Each viewer instance gets its own `FileWatcher`
+2. Source files are tracked when loaded via `add_from_file()`
+3. Image files are registered when rendered by `ImageView`
+4. On file change, the deck is recreated and the view refreshes
+5. Current slide position is preserved by name
+
+### Media File Watching
+
+Images from registered media folders are also watched:
+
+```python
+deck.add_media_folder(Path('media'), '/media')
+deck.add_from_file('slides.md')  # References ![](/media/photo.jpg)
+```
+
+When `photo.jpg` changes, the presentation reloads.
+
+---
+
 ## Workflow Best Practices
 
 1. **Write in plain text** - Use any editor (VS Code, Vim, etc.)
@@ -631,6 +794,8 @@ Studies show significant improvement[^1].
 3. **Collaborate** - Co-teachers and TAs can contribute via pull requests
 4. **Iterate** - Branch experiments, review diffs, roll back when needed
 5. **Reuse** - Adapt successful lectures across courses
+6. **Use named slides** - Enable insertion and replacement of dynamic content
+7. **Leverage hot reload** - Edit markdown and see changes instantly
 
 ---
 
@@ -640,6 +805,7 @@ Studies show significant improvement[^1].
 # Slide Title                    <- New slide (if headers-as-dividers)
 ## Section                       <- Subheading
 ---                              <- Explicit slide break
+[name: slide_name]               <- Name this slide for insert/replace
 
 **bold** *italic* `code`         <- Text formatting
 - bullet                         <- Unordered list
@@ -732,3 +898,29 @@ Content text here.
 | `weight` | `font-weight` | `[.subtitle:weight: 300]` |
 | `class` | Tailwind classes | `[.text:class: italic underline]` |
 | Any CSS | Direct CSS | `[.title:letter-spacing: 0.1em]` |
+
+### Python API Quick Reference
+
+```python
+from pathlib import Path
+from stagdeck import SlideDeck, App
+
+# Create deck and load from file
+deck = SlideDeck(title='My Talk')
+deck.add_media_folder(Path('media'), '/media')
+deck.add_from_file(Path('slides.md'))
+
+# Insert slides relative to named slides
+deck.insert('# New Slide', after='intro')
+deck.insert('# Another', before='conclusion')
+
+# Replace placeholder slides
+deck.replace('chart_placeholder', '# Real Chart')
+deck.replace('dynamic', builder=my_builder_func)
+
+# Run with hot reload (default)
+App.run(lambda: deck, title='My Talk')
+
+# Disable hot reload
+App.run(lambda: deck, hot_reload=False)
+```

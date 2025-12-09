@@ -91,7 +91,15 @@ tests/
 ├── conftest.py              # Shared fixtures
 ├── test_slide.py            # Slide class unit tests
 ├── test_slide_deck.py       # SlideDeck class unit tests
+├── test_markdown_file.py    # Markdown file loading, insert/replace
+├── test_file_watcher.py     # Hot reload file watching
 ├── test_registry.py         # DeckRegistry unit tests
+├── test_viewer.py           # DeckViewer UI tests
+├── test_renderer.py         # Render endpoint tests
+├── components/
+│   ├── test_content_elements.py
+│   ├── test_markdown_parser.py
+│   └── test_slide_layout.py
 └── theme/
     ├── __init__.py
     ├── test_loading.py      # Theme loading and inheritance
@@ -200,6 +208,33 @@ async def test_something(user: User) -> None:
     await user.open('/')
     # ... test code
 ```
+
+## Testing File Watcher
+
+The `FileWatcher` class requires async tests with `pytest-asyncio`.
+
+### Guidelines
+
+- Use short `check_interval` (e.g., 0.1s) for faster tests
+- Always stop the watcher and cancel tasks in a `finally` block
+- Use `tmp_path` fixture for temporary test files
+- Allow sufficient `asyncio.sleep()` time for file system changes to be detected
+- Use `Mock` callbacks to verify change detection
+
+See `tests/test_file_watcher.py` for implementation examples.
+
+## Testing Markdown File Loading
+
+Tests for `add_from_file()`, `insert()`, and `replace()` are standard unit tests.
+
+### Guidelines
+
+- Use `tmp_path` fixture to create temporary markdown files
+- Test both success cases and error handling (e.g., `FileNotFoundError`)
+- Verify slide names, positions, and content after operations
+- Test chaining (methods should return `self`)
+
+See `tests/test_markdown_file.py` for implementation examples.
 
 ## Theme Tests
 
