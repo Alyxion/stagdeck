@@ -101,49 +101,49 @@ class DeckViewer:
     
     # 🎯 Navigation methods
     
-    def next_slide(self) -> None:
+    async def next_slide(self) -> None:
         """⏭️ Go to the next slide."""
         if self.current_index < len(self.deck.slides) - 1:
             self.current_index += 1
             self.current_step = 0
-            self._update_view()
+            await self._update_view()
     
-    def previous_slide(self) -> None:
+    async def previous_slide(self) -> None:
         """⏮️ Go to the previous slide."""
         if self.current_index > 0:
             self.current_index -= 1
             self.current_step = 0
-            self._update_view()
+            await self._update_view()
     
-    def next_step(self) -> None:
+    async def next_step(self) -> None:
         """▶️ Go to the next step, or next slide if no more steps."""
         slide = self.current_slide
         if slide and self.current_step < slide.steps - 1:
             self.current_step += 1
-            self._update_view()
+            await self._update_view()
         else:
-            self.next_slide()
+            await self.next_slide()
     
-    def previous_step(self) -> None:
+    async def previous_step(self) -> None:
         """◀️ Go to the previous step, or previous slide if at first step."""
         if self.current_step > 0:
             self.current_step -= 1
-            self._update_view()
+            await self._update_view()
         elif self.current_index > 0:
             self.current_index -= 1
             prev_slide = self.deck.slides[self.current_index]
             self.current_step = prev_slide.steps - 1
-            self._update_view()
+            await self._update_view()
     
-    def go_to_slide(self, index: int, step: int = 0) -> None:
+    async def go_to_slide(self, index: int, step: int = 0) -> None:
         """🎯 Go to a specific slide by index and optionally step."""
         if 0 <= index < len(self.deck.slides):
             self.current_index = index
             slide = self.deck.slides[index]
             self.current_step = max(0, min(step, slide.steps - 1))
-            self._update_view()
+            await self._update_view()
     
-    def go_to_slide_by_name(self, slide_name: str, step_name: str | None = None) -> bool:
+    async def go_to_slide_by_name(self, slide_name: str, step_name: str | None = None) -> bool:
         """🔗 Navigate to a slide by name, optionally to a specific step."""
         index = self.deck.get_slide_index(slide_name)
         if index is None:
@@ -157,10 +157,10 @@ class DeckViewer:
                     step = s
                     break
         
-        self.go_to_slide(index, step)
+        await self.go_to_slide(index, step)
         return True
     
-    def reload(self) -> None:
+    async def reload(self) -> None:
         """🔄 Reload the deck from source files and refresh the view.
         
         Used for hot-reload when markdown files change.
@@ -188,17 +188,17 @@ class DeckViewer:
                 self.current_index = min(self.current_index, len(self.deck.slides) - 1)
                 self.current_step = 0
         
-        self._update_view()
+        await self._update_view()
     
     # 🎨 UI rendering methods
     
-    def _update_view(self) -> None:
+    async def _update_view(self) -> None:
         """🔄 Update the slide view, counter, and URL."""
         if self._slide_frame is None:
             return
         self._slide_frame.clear()
         with self._slide_frame:
-            self._build_slide_content()
+            await self._build_slide_content()
         if self._slide_counter:
             slide = self.current_slide
             if slide and slide.steps > 1:
@@ -218,7 +218,7 @@ class DeckViewer:
             window.history.replaceState({{}}, '', url);
         ''')
     
-    def _build_slide_content(self) -> None:
+    async def _build_slide_content(self) -> None:
         """🏗️ Build the current slide content."""
         slide = self.current_slide
         if not slide:
@@ -229,7 +229,7 @@ class DeckViewer:
         master_slide = self.deck.get_layout(slide.layout) if slide.layout else None
         
         # Let the slide build itself (with optional master layer and deck for style cascade)
-        slide.build(step=self.current_step, master_slide=master_slide, deck=self.deck)
+        await slide.build(step=self.current_step, master_slide=master_slide, deck=self.deck)
     
     # ⌨️ Event handlers
     
@@ -247,13 +247,13 @@ class DeckViewer:
         """⌨️ Handle keyboard navigation."""
         if e.action.keydown:
             if e.key.arrow_right:
-                self.next_slide()
+                await self.next_slide()
             elif e.key.arrow_left:
-                self.previous_slide()
+                await self.previous_slide()
             elif e.key.space and e.modifiers.shift:
-                self.previous_step()
+                await self.previous_step()
             elif e.key.space:
-                self.next_step()
+                await self.next_step()
             elif e.key == 'f':
                 await self._toggle_fullscreen()
     
@@ -429,7 +429,7 @@ class DeckViewer:
                     except ValueError:
                         pass
     
-    def build(self) -> None:
+    async def build(self) -> None:
         """🚀 Build the complete presentation UI."""
         self._set_as_current()
         self._init_from_query_params()
@@ -459,9 +459,9 @@ class DeckViewer:
                     self._build_deck_menu()
         
         ui.keyboard(on_key=self._handle_key)
-        self._update_view()
+        await self._update_view()
     
-    def build_render_frame(self) -> None:
+    async def build_render_frame(self) -> None:
         """📸 Build just the slide frame for rendering (no navbar, no scaling).
         
         Used by the render endpoint to capture clean slide images.
@@ -483,4 +483,4 @@ class DeckViewer:
             .style(f'width: {self.deck.width}px; height: {self.deck.height}px;')
         )
         
-        self._update_view()
+        await self._update_view()

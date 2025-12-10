@@ -72,27 +72,40 @@ class App:
             if hot_reload and deck.source_files:
                 watcher = FileWatcher()
                 viewer._file_watcher = watcher
+                viewer._needs_reload = False
                 
                 for source_file in deck.source_files:
                     watcher.watch(source_file)
                 
-                watcher.on_change(lambda p: viewer.reload())
+                # FileWatcher sets flag, timer checks it from UI context
+                def on_file_change(path):
+                    viewer._needs_reload = True
+                
+                async def check_reload():
+                    if viewer._needs_reload:
+                        viewer._needs_reload = False
+                        await viewer.reload()
+                
+                watcher.on_change(on_file_change)
                 asyncio.create_task(watcher.start())
+                
+                # Timer runs in UI context and can safely call reload
+                ui.timer(0.5, check_reload)
             
-            viewer.build()
+            await viewer.build()
         
         # Render-only page (no navbar, for screenshot capture)
         @ui.page('/_render_frame')
-        def render_frame_page():
+        async def render_frame_page():
             deck = deck_factory()
             viewer = DeckViewer(deck=deck)
-            viewer.build_render_frame()
+            await viewer.build_render_frame()
         
         if enable_render:
             from .renderer import setup_render_endpoint
             setup_render_endpoint(path=render_path)
         
-        ui.run(title=title, show=kwargs.pop('show', False), **kwargs)
+        ui.run(title=title, reload=True, show=kwargs.pop('show', False), **kwargs)
     
     @classmethod
     def create_page(
@@ -116,14 +129,14 @@ class App:
             >>> ui.run(title='My Presentations')
         """
         @ui.page(path)
-        def presentation_page():
+        async def presentation_page():
             deck = deck_factory()
             viewer = DeckViewer(deck=deck)
-            viewer.build()
+            await viewer.build()
         
         if enable_render_frame:
             @ui.page('/_render_frame')
-            def render_frame_page():
+            async def render_frame_page():
                 deck = deck_factory()
                 viewer = DeckViewer(deck=deck)
-                viewer.build_render_frame()
+                await viewer.build_render_frame()

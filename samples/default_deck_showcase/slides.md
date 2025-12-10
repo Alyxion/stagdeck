@@ -139,7 +139,7 @@ Use `![blur:4 overlay:0.5]` for both effects.
 
 [name: split_left]
 ![left](/media/mountain.jpg)
-Test
+
 ![right blur:5 overlay:0.5](/media/mountain.jpg)
 # Left Image Layout
 
@@ -306,6 +306,24 @@ Organize your presentations:
 | Custom Domain | ❌ | ❌ | ❌ | ✅ |
 | SLA Guarantee | ❌ | ❌ | 99.9% | 99.99% |
 | Price/month | Free | $9 | $49 | $199 |
+
+---
+
+# Office Suite Comparison
+![background](#1a1a2e)
+
+| Feature | Microsoft Office | LibreOffice |
+|---------|-----------------|-------------|
+| Price | $99/year | Free |
+| Platform | Windows, Mac, Web | Windows, Mac, Linux |
+| Cloud Storage | OneDrive (1TB) | None |
+| File Formats | .docx, .xlsx, .pptx | .odt, .ods, .odp + MS formats |
+| Collaboration | Real-time | Limited |
+| Offline Mode | ✅ | ✅ |
+| Macros | VBA | Basic, Python |
+| Support | Official | Community |
+
+
 
 ---
 

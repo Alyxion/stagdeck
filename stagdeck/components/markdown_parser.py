@@ -8,6 +8,9 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any
 
+# Slide separator - must be on its own line
+SLIDE_SEPARATOR = '---'
+
 
 class SlideContentType(Enum):
     """Types of content that can appear on a slide."""

@@ -924,3 +924,42 @@ App.run(lambda: deck, title='My Talk')
 # Disable hot reload
 App.run(lambda: deck, hot_reload=False)
 ```
+
+### Loading PowerPoint (PPTX) Slides
+
+Import existing PPTX presentations as full-fidelity slide images:
+
+```python
+# Using add_from_file (recommended)
+deck.add_from_file('presentation.pptx')
+
+# Insert after a named slide
+deck.add_from_file('charts.pptx', after='intro')
+
+# Select specific pages
+deck.add_from_file('presentation.pptx', pages='1,3-5')
+deck.add_from_file('presentation.pptx', pages=[1, 3, 4, 5])
+```
+
+**How it works:**
+1. LibreOffice converts PPTX → PDF (headless mode)
+2. pdf2image converts PDF → PNG images (one per slide)
+3. Images are cached in `<filename>.pptx_cache/` directory
+4. Cache is invalidated when PPTX file changes (hash-based)
+
+**Requirements:**
+```bash
+# macOS
+brew install --cask libreoffice
+brew install poppler
+pip install pdf2image
+
+# Linux
+apt install libreoffice poppler-utils
+pip install pdf2image
+```
+
+**Cache directory:**
+- Created next to the PPTX file: `presentation.pptx_cache/`
+- Contains: `slide_001.png`, `slide_002.png`, etc.
+- Add `*.pptx_cache` to `.gitignore` (or commit for faster CI builds)

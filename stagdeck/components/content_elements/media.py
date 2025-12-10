@@ -343,7 +343,7 @@ class ImageView(MediaView):
             src = src[4:-1].strip('"\'')
         
         # Register via current DeckViewer (has access to media folder mappings)
-        from ..viewer import DeckViewer
+        from stagdeck.viewer import DeckViewer
         viewer = DeckViewer.get_current()
         if viewer:
             viewer.register_watched_file(src)

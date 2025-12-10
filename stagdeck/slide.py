@@ -45,7 +45,6 @@ class Slide:
                         don't cause layout shifts.
     :ivar subtitle: Optional subtitle below the title.
     :ivar notes: Speaker notes (not displayed during presentation).
-    :ivar builder: Optional custom builder function for complex layouts.
     :ivar background_color: CSS color/gradient for background (if no layout).
     :ivar background_position: Position for split layouts ('left', 'right', 'top', 'bottom', or '').
     :ivar regions: List of SlideRegion for multi-region layouts.
@@ -64,7 +63,8 @@ class Slide:
     final_content: str | None = None  # For animation-stable sizing
     subtitle: str = ''
     notes: str = ''
-    builder: Callable[[int], None] | Callable[[], None] | None = None
+    # Runtime context (set during build, not persisted)
+    _build_context: dict = field(default_factory=dict, repr=False)
     background_color: str = ''
     background_modifiers: str = ''  # Raw modifier string for ImageView
     background_position: str = ''  # 'left', 'right', 'top', 'bottom', or '' for full
@@ -81,9 +81,10 @@ class Slide:
         """Get content used for layout sizing (final_content or content)."""
         return self.final_content if self.final_content is not None else self.content
     
-    def has_custom_builder(self) -> bool:
-        """🔧 Check if slide uses a custom builder function."""
-        return self.builder is not None
+    def has_custom_build(self) -> bool:
+        """🔧 Check if slide has a custom async build_content method."""
+        # Check if build_content is overridden (not the base class version)
+        return type(self).build_content is not Slide.build_content
     
     # =========================================================================
     # 🎨 Theme Override Methods
@@ -171,7 +172,7 @@ class Slide:
         """
         return self.get_style(master_slide).to_tailwind(element)
     
-    def build(
+    async def build(
         self,
         step: int = 0,
         master_slide: 'Slide | None' = None,
@@ -187,39 +188,297 @@ class Slide:
         :param deck: Parent deck for style cascade fallback.
         """
         from nicegui import ui
-        import inspect
         
         if master_slide is not None:
             # Layered mode: master below, content on top
             with ui.element('div').classes('w-full h-full relative'):
                 # Layer 0: Master slide
                 with ui.element('div').classes('absolute inset-0 z-0'):
-                    master_slide.build(step=step, master_slide=None, deck=deck)
+                    await master_slide.build(step=step, master_slide=None, deck=deck)
                 
                 # Layer 1: This slide's content
                 with ui.element('div').classes('absolute inset-0 z-10'):
-                    self._build_content(step, master_slide, deck)
+                    await self._build_content(step, master_slide, deck)
         else:
             # Simple mode: just render content directly
-            self._build_content(step, None, deck)
+            await self._build_content(step, None, deck)
     
-    def _build_content(
+    async def _build_content(
         self,
         step: int = 0,
         master_slide: 'Slide | None' = None,
         deck: 'SlideDeck | None' = None,
     ) -> None:
-        """🏗️ Build slide content (custom builder or default)."""
-        import inspect
+        """🏗️ Build slide content (custom build_content or default).
         
-        if self.has_custom_builder():
-            sig = inspect.signature(self.builder)
-            if len(sig.parameters) > 0:
-                self.builder(step)
-            else:
-                self.builder()
+        If the subclass overrides build_content(), it sets up the layout frame
+        (background, title) and calls build_content() for the content area.
+        Otherwise uses the default markdown layout system.
+        """
+        if self.has_custom_build():
+            await self._build_custom_slide(step, master_slide, deck)
         else:
             self._build_default_content(step, master_slide, deck)
+    
+    # =========================================================================
+    # 🎨 Layout Helper Methods - for use in build_content()
+    # =========================================================================
+    
+    def add_content_area(
+        self,
+        align: str = 'center',
+        background: str = '',
+        background_modifiers: str = '',
+    ):
+        """📦 Add a content area container for custom NiceGUI components.
+        
+        Use as a context manager to add content:
+        
+            with self.add_content_area():
+                ui.label('Hello')
+                ui.button('Click me')
+        
+        :param align: Content alignment - 'center', 'left', 'right', 'top', 'bottom'.
+        :param background: Optional background color/gradient/image URL.
+        :param background_modifiers: Modifiers like 'blur:8 overlay:0.5'.
+        :return: Context manager for the content container.
+        
+        Example:
+            async def build_content(self, step: int = 0):
+                with self.add_content_area(align='left'):
+                    ui.label('Left-aligned content')
+        """
+        from nicegui import ui
+        from .components.content_elements import ImageView
+        
+        # Alignment classes
+        align_classes = {
+            'center': 'items-center justify-center',
+            'left': 'items-start justify-center',
+            'right': 'items-end justify-center',
+            'top': 'items-center justify-start',
+            'bottom': 'items-center justify-end',
+        }
+        classes = align_classes.get(align, align_classes['center'])
+        
+        # Create container
+        container = ui.element('div').classes(f'flex-1 flex flex-col {classes} w-full')
+        
+        # Add background if specified
+        if background:
+            if background.startswith('url(') or background.startswith('/'):
+                # Image background
+                bg_url = background if background.startswith('url(') else f'url({background})'
+                image_view = ImageView(bg_url, background_modifiers)
+                with container:
+                    image_view.build_background(
+                        container_classes='absolute inset-0',
+                        theme_overlay_opacity=0.5,
+                    )
+            else:
+                # Color/gradient
+                container.style(f'background: {background};')
+        
+        return container
+    
+    def add_section(
+        self,
+        position: str = '',
+        background: str = '',
+        background_modifiers: str = '',
+        width: str = '',
+        height: str = '',
+    ):
+        """📐 Add a section/region within the slide.
+        
+        Creates a positioned section, similar to markdown split layouts.
+        
+        :param position: 'left', 'right', 'top', 'bottom', or '' for full.
+        :param background: Background color/gradient/image URL.
+        :param background_modifiers: Modifiers like 'blur:8 overlay:0.5'.
+        :param width: Custom width (e.g., '60%'). Defaults based on position.
+        :param height: Custom height (e.g., '40%'). Defaults based on position.
+        :return: Context manager for the section container.
+        
+        Example:
+            async def build_content(self, step: int = 0):
+                with self.add_section(position='left', background='/media/photo.jpg'):
+                    pass  # Image fills left half
+                with self.add_section(position='right'):
+                    ui.label('Content on right')
+        """
+        from nicegui import ui
+        from .components.content_elements import ImageView
+        
+        # Position-based sizing
+        if position == 'left':
+            classes = 'absolute inset-y-0 left-0'
+            default_width = '50%'
+            style = f'width: {width or default_width};'
+        elif position == 'right':
+            classes = 'absolute inset-y-0 right-0'
+            default_width = '50%'
+            style = f'width: {width or default_width};'
+        elif position == 'top':
+            classes = 'absolute inset-x-0 top-0'
+            default_height = '50%'
+            style = f'height: {height or default_height};'
+        elif position == 'bottom':
+            classes = 'absolute inset-x-0 bottom-0'
+            default_height = '50%'
+            style = f'height: {height or default_height};'
+        else:
+            classes = 'w-full h-full'
+            style = ''
+        
+        container = ui.element('div').classes(f'{classes} flex flex-col items-center justify-center overflow-hidden')
+        if style:
+            container.style(style)
+        
+        # Add background
+        if background:
+            if background.startswith('url(') or background.startswith('/'):
+                bg_url = background if background.startswith('url(') else f'url({background})'
+                image_view = ImageView(bg_url, background_modifiers)
+                with container:
+                    image_view.build_background(
+                        container_classes='absolute inset-0',
+                        theme_overlay_opacity=0.5,
+                    )
+            else:
+                container.style(f'background: {background};')
+        
+        return container
+    
+    async def build_content(self, step: int = 0) -> None:
+        """🎨 Override this method to build custom slide content.
+        
+        This is called after the slide frame (background, title) is set up.
+        Use layout helpers like add_content_area() and add_section().
+        
+        :param step: Current animation step (0-based).
+        
+        Example:
+            @dataclass
+            class MySlide(Slide):
+                async def build_content(self, step: int = 0):
+                    with self.add_content_area():
+                        ui.label('Hello World').classes('text-4xl')
+        """
+        pass  # Base implementation does nothing
+    
+    async def _build_custom_slide(
+        self,
+        step: int = 0,
+        master_slide: 'Slide | None' = None,
+        deck: 'SlideDeck | None' = None,
+    ) -> None:
+        """🔧 Build slide with custom build_content() method.
+        
+        Sets up the layout frame (background, title) then calls build_content().
+        """
+        from nicegui import ui
+        from .components.slide_layout import (
+            _get_background_style, _has_background_image, DEFAULT_CONFIG
+        )
+        from .components.content_elements import ImageView
+        
+        style = self.get_style(master_slide, deck)
+        config = DEFAULT_CONFIG
+        
+        # Store context for helper methods
+        self._build_context = {
+            'step': step,
+            'style': style,
+            'config': config,
+            'master_slide': master_slide,
+            'deck': deck,
+        }
+        
+        # Get theme defaults
+        overlay_style = style.get('overlay')
+        theme_overlay_opacity = getattr(overlay_style, 'opacity', 0.5) if overlay_style else 0.5
+        theme_blur_radius = 4
+        
+        split_bg_style = style.get('split_background')
+        split_bg_color = split_bg_style.color if split_bg_style.color else '#1a1a2e'
+        
+        # Title styles
+        title_style = style.get('split_title') or style.get('title')
+        subtitle_style = style.get('split_subtitle') or style.get('subtitle')
+        
+        position = self.background_position
+        is_split = position in ('left', 'right', 'top', 'bottom')
+        has_bg_image = _has_background_image(self)
+        bg_style = _get_background_style(self)
+        
+        # Main container
+        main_style = '' if (is_split and has_bg_image) else bg_style
+        
+        with ui.element('div').classes('slide-layout w-full h-full relative').style(main_style):
+            # Background image handling
+            if is_split and has_bg_image:
+                if position == 'left':
+                    clip_classes = 'absolute inset-y-0 left-0 w-1/2 overflow-hidden'
+                elif position == 'right':
+                    clip_classes = 'absolute inset-y-0 right-0 w-1/2 overflow-hidden'
+                elif position == 'top':
+                    clip_classes = 'absolute inset-x-0 top-0 h-1/2 overflow-hidden'
+                else:
+                    clip_classes = 'absolute inset-x-0 bottom-0 h-1/2 overflow-hidden'
+                
+                with ui.element('div').classes(clip_classes):
+                    image_view = ImageView(self.background_color, self.background_modifiers)
+                    image_view.build_background(
+                        container_classes='w-full h-full',
+                        theme_overlay_opacity=theme_overlay_opacity,
+                        theme_blur_default=theme_blur_radius,
+                    )
+            elif has_bg_image:
+                image_view = ImageView(self.background_color, self.background_modifiers)
+                image_view.build_background(
+                    container_classes='absolute inset-0',
+                    theme_overlay_opacity=theme_overlay_opacity,
+                    theme_blur_default=theme_blur_radius,
+                )
+            
+            # Content container positioning
+            content_classes = 'relative w-full h-full z-10 flex flex-col'
+            content_style = ''
+            padding = f'padding: {config.margin_top}% {config.margin_right}% {config.margin_bottom}% {config.margin_left}%;'
+            
+            if position == 'left':
+                content_classes = 'absolute right-0 top-0 w-1/2 h-full z-10 flex flex-col'
+                content_style = f'background: {split_bg_color}; {padding}'
+            elif position == 'right':
+                content_classes = 'absolute left-0 top-0 w-1/2 h-full z-10 flex flex-col'
+                content_style = f'background: {split_bg_color}; {padding}'
+            elif position == 'top':
+                content_classes = 'absolute left-0 bottom-0 w-full h-1/2 z-10 flex flex-col'
+                content_style = f'background: {split_bg_color}; {padding}'
+            elif position == 'bottom':
+                content_classes = 'absolute left-0 top-0 w-full h-1/2 z-10 flex flex-col'
+                content_style = f'background: {split_bg_color}; {padding}'
+            else:
+                content_style = padding
+            
+            with ui.element('div').classes(content_classes).style(content_style):
+                # Title (if set)
+                if self.title:
+                    title_el = ui.label(self.title)
+                    if title_style:
+                        title_style.apply(title_el)
+                    title_el.style('margin-bottom: 0.5rem;')
+                
+                # Subtitle (if set)
+                if self.subtitle:
+                    subtitle_el = ui.label(self.subtitle)
+                    if subtitle_style:
+                        subtitle_style.apply(subtitle_el)
+                    subtitle_el.style('margin-bottom: 1rem;')
+                
+                # Call custom build_content (async)
+                await self.build_content(step)
     
     def _build_default_content(
         self,

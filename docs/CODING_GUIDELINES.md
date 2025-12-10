@@ -170,6 +170,22 @@ class MySlide(MasterSlide):
         self.add('title', style='title')
 ```
 
+### Running the Server
+
+**Always start the server from the project root directory**, not from a subdirectory:
+
+```bash
+# ✅ GOOD: Start from project root
+cd /path/to/stagdeck
+poetry run python samples/default_deck_showcase/main.py
+
+# ❌ BAD: Start from subdirectory
+cd samples/default_deck_showcase
+poetry run python main.py
+```
+
+This ensures NiceGUI's hot reload can track changes in both the sample and the `stagdeck` source code.
+
 ### Hot Reload
 
 NiceGUI supports hot reload - code changes are applied automatically without restarting the server. Only restart when:
@@ -452,22 +468,49 @@ deck.add(name='features', title='Features')
 deck.add(title='Introduction')  # Gets name 'slide_0'
 ```
 
-### Custom Builders
+### Custom Python Slides
+
+For interactive content (charts, dynamic data, NiceGUI components), subclass `Slide` and override `build_content()`:
+
 ```python
-# ✅ GOOD: Accept step parameter for multi-step slides
-def my_slide(step: int):
-    if step >= 0:
-        ui.label('First item')
-    if step >= 1:
-        ui.label('Second item')
+from dataclasses import dataclass
+from nicegui import ui
+from stagdeck.slide import Slide
 
-deck.add(name='reveal', builder=my_slide, steps=2)
+@dataclass
+class ChartSlide(Slide):
+    def __post_init__(self):
+        self.title = '📊 Analytics'
+        self.background_color = '#1a1a2e'
+    
+    async def build_content(self, step: int = 0):
+        with self.add_content_area():
+            ui.plotly(my_chart).classes('w-full')
 
-# ✅ GOOD: No-step builder is also fine
-def simple_slide():
-    ui.label('Simple content')
+# Add to deck
+deck.slides.append(ChartSlide(name='chart'))
+```
 
-deck.add(name='simple', builder=simple_slide)
+See [CUSTOM_SLIDES.md](CUSTOM_SLIDES.md) for comprehensive documentation on:
+- Layout helpers: `add_content_area()`, `add_section()`
+- Split layouts with background images
+- Multi-step animations
+- Examples with Plotly, progress bars, live metrics
+
+### Loading External Files
+
+```python
+# Load slides from markdown
+deck.add_from_file('slides.md')
+
+# Load slides from PowerPoint (requires LibreOffice + pdf2image)
+deck.add_from_file('presentation.pptx')
+
+# Insert after a named slide
+deck.add_from_file('extra.md', after='intro')
+
+# Select specific pages
+deck.add_from_file('presentation.pptx', pages='1,3-5')
 ```
 
 ## 🧪 Testing

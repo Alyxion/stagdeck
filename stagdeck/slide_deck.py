@@ -1,5 +1,6 @@
 """📊 SlideDeck - Data model for presentation decks."""
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -8,6 +9,42 @@ from .slide import Slide, SlideRegion
 
 if TYPE_CHECKING:
     from .theme import LayoutStyle, Theme, ThemeContext, ThemeOverrides
+
+
+def _parse_page_selection(pages: str | list[int] | None, total: int) -> list[int]:
+    """Parse page selection into list of 0-based indices.
+    
+    Supports:
+    - None or empty: all pages
+    - List of ints: direct indices (1-based)
+    - String: comma-separated ranges like "1,3-5,7" (1-based)
+    
+    :param pages: Page selection (1-based).
+    :param total: Total number of pages available.
+    :return: List of 0-based indices.
+    """
+    if pages is None or pages == '' or pages == []:
+        return list(range(total))
+    
+    if isinstance(pages, list):
+        # Convert 1-based to 0-based
+        return [p - 1 for p in pages if 1 <= p <= total]
+    
+    # Parse string like "1,3-5,7"
+    indices = []
+    for part in pages.split(','):
+        part = part.strip()
+        if '-' in part:
+            start, end = part.split('-', 1)
+            start = int(start.strip())
+            end = int(end.strip())
+            indices.extend(range(start - 1, min(end, total)))
+        else:
+            idx = int(part) - 1
+            if 0 <= idx < total:
+                indices.append(idx)
+    
+    return sorted(set(indices))
 
 
 @dataclass
@@ -123,7 +160,6 @@ class SlideDeck:
         content: str = '',
         subtitle: str = '',
         notes: str = '',
-        builder=None,
         background: str = '',
         background_color: str = '',  # Alias for background (backward compat)
         style: 'LayoutStyle | None' = None,
@@ -176,7 +212,6 @@ class SlideDeck:
         :param content: Slide content (overrides markdown).
         :param subtitle: Slide subtitle (overrides markdown).
         :param notes: Speaker notes (overrides markdown).
-        :param builder: Custom builder function.
         :param background: Background color/gradient/image.
         :param background_color: Alias for background (backward compat).
         :param style: LayoutStyle for this slide.
@@ -307,7 +342,6 @@ class SlideDeck:
             content=final_content,
             subtitle=final_subtitle,
             notes=final_notes,
-            builder=builder,
             background_color=final_background,
             background_modifiers=parsed_background_modifiers,
             background_position=parsed_background_position,
@@ -325,41 +359,88 @@ class SlideDeck:
     def add_from_file(
         self,
         path: str | Path,
-        separator: str = '---',
+        pages: str | list[int] | None = None,
+        *,
+        before: str = '',
+        after: str = '',
+        name_prefix: str = 'pptx',
+        url_prefix: str = '/pptx_slides',
     ) -> 'SlideDeck':
-        """📄 Load slides from a markdown file.
+        """📄 Load slides from a markdown or PPTX file.
         
-        The file can contain multiple slides separated by `---` (or custom separator).
-        Each slide can use `[name: slidename]` to assign a name for later reference.
+        Supports both markdown (.md) and PowerPoint (.pptx) files.
+        For PPTX, LibreOffice is required for first conversion, but cached
+        images can be committed to git for deployment without LibreOffice.
         
-        Example markdown file:
-        ```markdown
-        [name: intro]
-        ![background](#1a1a2e)
-        # Welcome
+        Example usage:
+        ```python
+        # Load all slides from markdown (appends to end)
+        deck.add_from_file('slides.md')
         
-        ---
+        # Load specific slides (1-based)
+        deck.add_from_file('slides.md', pages='1,3-5')
+        deck.add_from_file('slides.md', pages=[1, 3, 4, 5])
         
-        [name: features]
-        # Features
-        - Item 1
-        - Item 2
+        # Load from PowerPoint
+        deck.add_from_file('presentation.pptx')
+        deck.add_from_file('presentation.pptx', pages='2-4')
         
-        ---
-        
-        [name: chart_placeholder]
-        # Chart
-        (This slide will be replaced by Python)
+        # Insert slides at specific position
+        deck.add_from_file('extra.pptx', after='intro')
+        deck.add_from_file('charts.md', before='conclusion')
         ```
         
-        :param path: Path to the markdown file.
-        :param separator: Slide separator (default '---').
+        :param path: Path to the markdown or PPTX file.
+        :param pages: Page selection - None for all, or "1,3-5" or [1,3,4,5] (1-based).
+        :param before: Insert before the slide with this name.
+        :param after: Insert after the slide with this name.
+        :param name_prefix: Prefix for PPTX slide names (e.g., 'pptx' -> 'pptx_001').
+        :param url_prefix: URL prefix for serving PPTX images.
         :return: Self for chaining.
         :raises FileNotFoundError: If file doesn't exist.
+        :raises ValueError: If both before and after are specified.
         """
+        if before and after:
+            raise ValueError("Cannot specify both 'before' and 'after'")
+        
         path = Path(path).resolve()
         if not path.exists():
-            raise FileNotFoundError(f"Markdown file not found: {path}")
+            raise FileNotFoundError(f"File not found: {path}")
+        
+        # Calculate insertion index if before/after specified
+        insert_idx = None
+        if before or after:
+            target_name = before or after
+            target_idx = self.get_slide_index(target_name)
+            if target_idx is None:
+                raise ValueError(f"Slide not found: '{target_name}'")
+            insert_idx = target_idx if before else target_idx + 1
+        
+        # Remember current slide count for insertion
+        count_before = len(self.slides)
+        
+        # Dispatch based on file extension
+        if path.suffix.lower() == '.pptx':
+            self._add_from_pptx(path, pages, name_prefix, url_prefix)
+        else:
+            self._add_from_markdown(path, pages)
+        
+        # Move new slides to insertion point if needed
+        if insert_idx is not None:
+            new_slides = self.slides[count_before:]
+            del self.slides[count_before:]
+            for i, slide in enumerate(new_slides):
+                self.slides.insert(insert_idx + i, slide)
+        
+        return self
+    
+    def _add_from_markdown(
+        self,
+        path: Path,
+        pages: str | list[int] | None,
+    ) -> 'SlideDeck':
+        """Load slides from a markdown file."""
+        from .components.markdown_parser import SLIDE_SEPARATOR
         
         # Track source file for hot-reload
         if path not in self.source_files:
@@ -368,13 +449,47 @@ class SlideDeck:
         content = path.read_text(encoding='utf-8')
         
         # Split by separator (must be on its own line)
-        import re
-        slides_md = re.split(rf'^{re.escape(separator)}\s*$', content, flags=re.MULTILINE)
+        slides_md = re.split(rf'^{re.escape(SLIDE_SEPARATOR)}\s*$', content, flags=re.MULTILINE)
+        slides_md = [s.strip() for s in slides_md if s.strip()]
         
-        for slide_md in slides_md:
-            slide_md = slide_md.strip()
-            if slide_md:
-                self.add(slide_md)
+        # Apply page selection
+        indices = _parse_page_selection(pages, len(slides_md))
+        
+        for idx in indices:
+            self.add(slides_md[idx])
+        
+        return self
+    
+    def _add_from_pptx(
+        self,
+        path: Path,
+        pages: str | list[int] | None,
+        name_prefix: str,
+        url_prefix: str,
+    ) -> 'SlideDeck':
+        """Load slides from a PPTX file."""
+        from .utils.pptx_loader import convert_pptx_to_images
+        
+        # Convert PPTX to images (uses hash-based cache)
+        cache_dir, image_paths = convert_pptx_to_images(path)
+        
+        # Register the cache directory as a media folder
+        self.add_media_folder(cache_dir, url_prefix)
+        
+        # Apply page selection
+        indices = _parse_page_selection(pages, len(image_paths))
+        
+        # Add selected slides
+        for idx in indices:
+            img_path = image_paths[idx]
+            slide_num = idx + 1
+            name = f"{name_prefix}_{slide_num:03d}"
+            
+            # Create slide with image as full background
+            self.add(
+                f"![](/{url_prefix.strip('/')}/{img_path.name})",
+                name=name,
+            )
         
         return self
     

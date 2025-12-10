@@ -293,7 +293,7 @@ def detect_layout_mode(slide: 'Slide') -> LayoutMode:
     :return: Detected layout mode.
     """
     has_title = bool(slide.title)
-    has_content = bool(slide.content) or slide.has_custom_builder()
+    has_content = bool(slide.content) or slide.has_custom_build()
     has_subtitle = bool(slide.subtitle)
     
     if has_title and not has_content and not has_subtitle:
@@ -423,36 +423,38 @@ def build_slide_layout(
         content_style = ''
         position = slide.background_position
         
-        # Use consistent padding matching other slide types
-        padding = f'padding: {config.margin_top}% {config.margin_right}% {config.margin_bottom}% {config.margin_left}%;'
-        
+        # No padding here - _build_title_content handles its own padding
+        # This ensures split layouts match non-split layouts
         if position == 'left':
             # Image on left, content on right half
             content_classes = 'absolute right-0 top-0 w-1/2 h-full z-10 flex flex-col'
-            content_style = f'background: {split_bg_color}; {padding}'
+            content_style = f'background: {split_bg_color};'
         elif position == 'right':
             # Image on right, content on left half
             content_classes = 'absolute left-0 top-0 w-1/2 h-full z-10 flex flex-col'
-            content_style = f'background: {split_bg_color}; {padding}'
+            content_style = f'background: {split_bg_color};'
         elif position == 'top':
             # Image on top, content on bottom half
             content_classes = 'absolute left-0 bottom-0 w-full h-1/2 z-10 flex flex-col'
-            content_style = f'background: {split_bg_color}; {padding}'
+            content_style = f'background: {split_bg_color};'
         elif position == 'bottom':
             # Image on bottom, content on top half
             content_classes = 'absolute left-0 top-0 w-full h-1/2 z-10 flex flex-col'
-            content_style = f'background: {split_bg_color}; {padding}'
+            content_style = f'background: {split_bg_color};'
         
         with ui.element('div').classes(content_classes).style(content_style):
-            # Use split styles for content on dark background
-            if mode == LayoutMode.TITLE_ONLY:
-                _build_title_only(slide, style, config, use_split_styles=True)
+            # For split layouts, always use title_content layout (title at top)
+            # This ensures consistent title positioning with non-split layouts
+            if is_split:
+                _build_title_content(slide, step, style, config, sizing_content, use_split_styles=True)
+            elif mode == LayoutMode.TITLE_ONLY:
+                _build_title_only(slide, style, config, use_split_styles=False)
             elif mode == LayoutMode.TITLE_CENTERED:
-                _build_title_centered(slide, style, config, use_split_styles=True)
+                _build_title_centered(slide, style, config, use_split_styles=False)
             elif mode == LayoutMode.CONTENT_ONLY:
                 _build_content_only(slide, step, style, config, sizing_content)
             else:
-                _build_title_content(slide, step, style, config, sizing_content, use_split_styles=True)
+                _build_title_content(slide, step, style, config, sizing_content, use_split_styles=False)
 
 
 def _extract_image_path(image_url: str) -> str:
@@ -540,31 +542,34 @@ def _build_multi_region_layout(
                         f'background: {split_bg_color};'
                     )
                 
-                # Content container
+                # Content container - single padding to match non-split layouts
                 padding = f'padding: {config.margin_top}% {config.margin_right}% {config.margin_bottom}% {config.margin_left}%;'
                 
                 with ui.element('div').classes('relative z-10 w-full h-full flex flex-col').style(padding):
-                    # Title - use split_title style from theme (same as single-image split)
+                    # Title - use split_title style from theme (fixed at top)
+                    # Use same title_gap as single split layout for consistency
                     if region.title:
-                        title_el = ui.label(region.title)
-                        if split_title_style:
-                            split_title_style.apply(title_el)
-                        title_el.style('margin-bottom: 0.5rem;')
+                        with ui.element('div').classes('flex-shrink-0').style(
+                            f'margin-bottom: {config.title_gap}%;'
+                        ):
+                            title_el = ui.label(region.title)
+                            if split_title_style:
+                                split_title_style.apply(title_el)
                     
-                    # Subtitle - use split_subtitle style from theme
+                    # Subtitle - use split_subtitle style from theme (fixed below title)
                     if region.subtitle:
-                        subtitle_el = ui.label(region.subtitle)
-                        if split_subtitle_style:
-                            split_subtitle_style.apply(subtitle_el)
-                        subtitle_el.style('margin-bottom: 1rem;')
+                        with ui.element('div').classes('flex-shrink-0').style('margin-bottom: 1rem;'):
+                            subtitle_el = ui.label(region.subtitle)
+                            if split_subtitle_style:
+                                split_subtitle_style.apply(subtitle_el)
                     
-                    # Content - use split_text style from theme
+                    # Content - fills remaining space, vertically centered within
                     if region.content:
-                        with ui.element('div').classes('flex-1') as content_el:
+                        with ui.element('div').classes('flex-1 flex flex-col justify-center').style('min-height: 0;') as content_el:
                             if split_text_style:
                                 split_text_style.apply(content_el)
-                            content_el.style('line-height: 1.5;')
-                            ui.markdown(region.content)
+                            # Use proper content rendering with font sizing
+                            _render_content(region.content, style, config, is_full_page=False)
 
 
 def _get_background_style(slide: 'Slide') -> str:
@@ -806,10 +811,10 @@ def _build_title_content(
                     subtitle_el.style(subtitle_override_css)
         
         # Content region (fills remaining space)
-        # For tables: fill and stretch. For other content: center vertically
-        content_classes = 'flex-1 flex flex-col'
-        if not is_table_content:
-            content_classes += ' justify-center'
+        # For tables: center horizontally and vertically. For other content: center vertically
+        content_classes = 'flex-1 flex flex-col justify-center'
+        if is_table_content:
+            content_classes += ' items-center'  # Center table horizontally
         
         with ui.element('div').classes(f'{content_classes} {text_override_classes}') as content_el:
             content_el.style('min-height: 0;')
@@ -866,10 +871,11 @@ def _render_content(
         # Route to appropriate renderer based on content type
         # Use inline rendering (not async build) for synchronous layout
         if metrics.content_type == 'table':
-            with ui.element('div').classes('w-full').style(
+            # Table: don't force full width so it can be centered
+            with ui.element('div').style(
                 f'font-size: {px_size}px; line-height: 1.4;'
             ):
-                ui.markdown(content).classes('w-full')
+                ui.markdown(content)
         elif metrics.content_type == 'bullets':
             with ui.element('div').classes('w-full').style(
                 f'font-size: {px_size}px; line-height: 1.5;'
