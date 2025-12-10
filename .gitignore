@@ -209,3 +209,6 @@ __marimo__/
 
 # StagDeck PPTX cache directories
 *.pptx_cache/
+
+# Private samples (separate repos)
+samples/lechleredc/
