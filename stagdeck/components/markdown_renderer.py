@@ -11,7 +11,7 @@ from typing import Any
 
 from nicegui import ui
 
-from .content_elements import ImageView
+from .content_elements import MediaView
 
 
 class BlockType(Enum):
@@ -332,15 +332,15 @@ def _render_heading(block: MarkdownBlock, font_size: float) -> None:
 
 
 def _render_image(block: MarkdownBlock, max_height: str = '60%') -> None:
-    """Render an inline image using ImageView.
+    """Render an inline image/video using MediaView.
     
-    :param block: The markdown block containing image source.
+    :param block: The markdown block containing media source.
     :param max_height: Maximum height CSS value. Default '60%' adapts to
         parent container for any layout (top/bottom, left/right splits).
     """
     # Use 'inline' modifier with radius and fit settings
-    image_view = ImageView(block.content, 'inline radius:8px fit:contain')
-    image_view.build_inline(max_height=max_height)
+    media_view = MediaView.from_string(block.content, 'inline radius:8px fit:contain')
+    media_view.build_inline(max_height=max_height)
 
 
 def _render_paragraph(block: MarkdownBlock, font_size: float) -> None:

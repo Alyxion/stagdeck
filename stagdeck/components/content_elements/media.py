@@ -1,12 +1,22 @@
 """Media view classes for displaying images and other media."""
 
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass, field
-from typing import Any
+from pathlib import Path
+from typing import Any, TYPE_CHECKING
 
 from nicegui import ui
 
 from .base import ContentElement
+
+if TYPE_CHECKING:
+    pass
+
+# File extensions for media type detection
+IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.svg', '.webp', '.bmp', '.ico', '.heic', '.heif', '.tiff'}
+VIDEO_EXTENSIONS = {'.mp4', '.avi', '.mov', '.webm', '.mkv', '.m4v', '.ogv'}
 
 
 @dataclass
@@ -103,6 +113,9 @@ class MediaView(ContentElement):
     
     Handles common media properties like blur, overlay, positioning.
     Parses modifier strings for extensibility.
+    
+    Use MediaView.from_string() to automatically create the appropriate
+    subclass (ImageView or VideoView) based on file extension.
     """
     
     def __init__(
@@ -143,6 +156,57 @@ class MediaView(ContentElement):
         for key, value in kwargs.items():
             if key not in ('blur', 'overlay', 'position', 'border_radius', 'object_fit'):
                 self.style.extra[key] = value
+    
+    @classmethod
+    def from_string(
+        cls,
+        src: str,
+        modifiers: str = '',
+        **kwargs: Any,
+    ) -> 'MediaView':
+        """Factory method to create appropriate MediaView subclass based on file type.
+        
+        Parses the source string to determine if it's an image or video,
+        then returns the appropriate subclass (ImageView or VideoView).
+        
+        :param src: Media source - can be:
+            - URL with extension: '/media/photo.jpg', 'url(/media/photo.jpg)'
+            - Color: '#1a1a2e'
+            - Gradient: 'linear-gradient(...)'
+        :param modifiers: Space-separated modifier string (e.g., "blur:8 overlay:0.5 left").
+        :param kwargs: Additional arguments passed to the subclass constructor.
+        :return: ImageView or VideoView instance.
+        
+        Example:
+            # Automatically creates ImageView
+            media = MediaView.from_string('/media/photo.jpg', 'blur:8 overlay:0.5')
+            
+            # Automatically creates VideoView
+            media = MediaView.from_string('/media/intro.mp4', 'autoplay loop')
+            
+            # Colors and gradients create ImageView (for CSS backgrounds)
+            media = MediaView.from_string('#1a1a2e')
+            media = MediaView.from_string('linear-gradient(135deg, #1a1a2e, #16213e)')
+        """
+        # Extract path from url(...) wrapper if present
+        path = src
+        if path.startswith('url(') and path.endswith(')'):
+            path = path[4:-1].strip('"\'')
+        
+        # Colors and gradients -> ImageView (CSS background)
+        if path.startswith('#') or 'gradient' in path.lower():
+            return ImageView(src, modifiers, **kwargs)
+        
+        # Detect file extension
+        # Handle query strings: /media/photo.jpg?v=123 -> .jpg
+        clean_path = path.split('?')[0].split('#')[0]
+        ext = Path(clean_path).suffix.lower()
+        
+        if ext in VIDEO_EXTENSIONS:
+            return VideoView(src, modifiers, **kwargs)
+        
+        # Default to ImageView for images and unknown types
+        return ImageView(src, modifiers, **kwargs)
     
     @property
     def has_blur(self) -> bool:
@@ -404,6 +468,146 @@ class ImageView(MediaView):
     
     async def build(self) -> None:
         """Build the image element based on mode."""
+        if self.mode == 'inline':
+            self.build_inline()
+        else:
+            self.build_background()
+
+
+class VideoView(MediaView):
+    """Video content element for video display scenarios.
+    
+    Supports:
+    - Background videos (full slide, muted, looping)
+    - Inline videos within content
+    - Autoplay, loop, muted controls
+    
+    Example usage:
+        # From modifier string (preferred)
+        VideoView('/media/intro.mp4', 'autoplay loop muted')
+        
+        # Inline mode
+        VideoView('/media/demo.mp4', 'inline controls')
+        
+        # Via factory method (recommended)
+        MediaView.from_string('/media/intro.mp4', 'autoplay loop')
+    """
+    
+    def __init__(
+        self,
+        src: str,
+        modifiers: str = '',
+        *,
+        width: str = '100%',
+        height: str = '100%',
+        **kwargs: Any,
+    ):
+        """Initialize video view.
+        
+        :param src: Video source URL or path.
+        :param modifiers: Space-separated modifier string.
+            Supported: autoplay, loop, muted, controls, inline, left/right/top/bottom.
+        :param width: CSS width for the video container.
+        :param height: CSS height for the video container.
+        :param kwargs: Direct style overrides.
+        """
+        # Determine mode from modifiers
+        mode = 'background'
+        if 'inline' in modifiers.lower():
+            mode = 'inline'
+        elif any(pos in modifiers.lower() for pos in ('left', 'right', 'top', 'bottom')):
+            mode = 'region'
+        
+        super().__init__(
+            src=src,
+            modifiers=modifiers,
+            mode=mode,
+            **kwargs,
+        )
+        self.width = width
+        self.height = height
+        
+        # Parse video-specific modifiers
+        mod_lower = modifiers.lower()
+        self.autoplay = 'autoplay' in mod_lower
+        self.loop = 'loop' in mod_lower
+        self.muted = 'muted' in mod_lower or mode == 'background'  # Background videos are muted by default
+        self.controls = 'controls' in mod_lower
+    
+    def get_video_url(self) -> str:
+        """Get the video URL.
+        
+        :return: Video URL (extracted from url() wrapper if present).
+        """
+        src = self.src
+        if src.startswith('url(') and src.endswith(')'):
+            src = src[4:-1].strip('"\'')
+        return src
+    
+    def build_background(
+        self,
+        container_classes: str = 'absolute inset-0',
+        theme_overlay_opacity: float = 0.5,
+        **kwargs: Any,
+    ) -> None:
+        """Build background video with optional overlay.
+        
+        :param container_classes: CSS classes for the container.
+        :param theme_overlay_opacity: Default overlay opacity from theme.
+        """
+        video_url = self.get_video_url()
+        
+        # Video container
+        with ui.element('div').classes(container_classes).style('overflow: hidden;'):
+            ui.html(f'''
+                <video 
+                    src="{video_url}"
+                    style="width: 100%; height: 100%; object-fit: cover;"
+                    {'autoplay' if self.autoplay or True else ''}
+                    {'loop' if self.loop or True else ''}
+                    {'muted' if self.muted or True else ''}
+                    playsinline
+                ></video>
+            ''')
+        
+        # Add overlay if requested
+        if self.has_overlay:
+            opacity = self.get_overlay_opacity(theme_overlay_opacity)
+            ui.element('div').classes(container_classes).style(
+                f'background: rgba(0, 0, 0, {opacity}); pointer-events: none;'
+            )
+    
+    def build_inline(self, max_height: str = '60%') -> None:
+        """Build inline video for content display.
+        
+        :param max_height: Maximum height CSS value.
+        """
+        video_url = self.get_video_url()
+        
+        attrs = []
+        if self.autoplay:
+            attrs.append('autoplay')
+        if self.loop:
+            attrs.append('loop')
+        if self.muted:
+            attrs.append('muted')
+        if self.controls:
+            attrs.append('controls')
+        attrs.append('playsinline')
+        
+        attrs_str = ' '.join(attrs)
+        
+        ui.html(f'''
+            <video 
+                src="{video_url}"
+                style="max-width: 100%; max-height: {max_height}; height: auto; 
+                       border-radius: {self.style.border_radius}; margin: 0.5em auto; display: block;"
+                {attrs_str}
+            ></video>
+        ''')
+    
+    async def build(self) -> None:
+        """Build the video element based on mode."""
         if self.mode == 'inline':
             self.build_inline()
         else:

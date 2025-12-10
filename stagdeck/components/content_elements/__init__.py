@@ -10,7 +10,7 @@ from .base import (
     REM_TO_PX_FACTOR,
 )
 
-from .media import MediaView, MediaStyle, ImageView
+from .media import MediaView, MediaStyle, ImageView, VideoView, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 from .table import TableElement, render_table
 from .bullet_list import BulletListElement, render_bullet_list
 from .numbered_list import NumberedListElement, render_numbered_list
@@ -28,6 +28,9 @@ __all__ = [
     'MediaView',
     'MediaStyle',
     'ImageView',
+    'VideoView',
+    'IMAGE_EXTENSIONS',
+    'VIDEO_EXTENSIONS',
     # Element Classes
     'TableElement',
     'BulletListElement',

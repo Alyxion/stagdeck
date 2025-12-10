@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 from nicegui import ui
 
-from .content_elements import ImageView
+from .content_elements import MediaView
 
 if TYPE_CHECKING:
     from ..slide import Slide
@@ -325,6 +325,7 @@ def build_slide_layout(
     style: 'LayoutStyle | None' = None,
     config: LayoutConfig | None = None,
     final_content: str | None = None,
+    deck: 'SlideDeck | None' = None,
 ) -> None:
     """Build slide with automatic layout and scaling.
     
@@ -334,6 +335,7 @@ def build_slide_layout(
     :param config: Layout configuration (uses defaults if None).
     :param final_content: Content used for sizing (for animation stability).
                          If None, uses slide.content.
+    :param deck: Parent deck for default background fallback.
     """
     from ..theme import LayoutStyle
     
@@ -353,7 +355,19 @@ def build_slide_layout(
     # Use final_content for sizing calculations, current content for display
     sizing_content = final_content if final_content is not None else slide.content
     
-    # Background
+    # Background - use slide's background, or fall back to deck's default
+    effective_bg = slide.background_color
+    effective_bg_modifiers = slide.background_modifiers
+    if not effective_bg and deck and deck.default_background:
+        effective_bg = deck.default_background
+        effective_bg_modifiers = deck.default_background_modifiers
+    
+    # Temporarily set for helper functions
+    original_bg = slide.background_color
+    original_modifiers = slide.background_modifiers
+    slide.background_color = effective_bg
+    slide.background_modifiers = effective_bg_modifiers
+    
     bg_style = _get_background_style(slide)
     has_bg_image = _has_background_image(slide)
     
@@ -402,16 +416,16 @@ def build_slide_layout(
             
             with ui.element('div').classes(clip_classes):
                 # Use raw modifiers string from slide
-                image_view = ImageView(slide.background_color, slide.background_modifiers)
-                image_view.build_background(
+                media_view = MediaView.from_string(slide.background_color, slide.background_modifiers)
+                media_view.build_background(
                     container_classes='w-full h-full',
                     theme_overlay_opacity=theme_overlay_opacity,
                     theme_blur_default=theme_blur_radius,
                 )
         elif has_bg_image:
             # Full background image - use raw modifiers from slide
-            image_view = ImageView(slide.background_color, slide.background_modifiers)
-            image_view.build_background(
+            media_view = MediaView.from_string(slide.background_color, slide.background_modifiers)
+            media_view.build_background(
                 container_classes='absolute inset-0',
                 theme_overlay_opacity=theme_overlay_opacity,
                 theme_blur_default=theme_blur_radius,
@@ -455,6 +469,10 @@ def build_slide_layout(
                 _build_content_only(slide, step, style, config, sizing_content)
             else:
                 _build_title_content(slide, step, style, config, sizing_content, use_split_styles=False)
+    
+    # Restore original background values
+    slide.background_color = original_bg
+    slide.background_modifiers = original_modifiers
 
 
 def _extract_image_path(image_url: str) -> str:
@@ -525,10 +543,10 @@ def _build_multi_region_layout(
                 # Background image (if any)
                 if region.image:
                     # Use raw modifiers string directly from region
-                    image_view = ImageView(region.image, region.modifiers)
+                    media_view = MediaView.from_string(region.image, region.modifiers)
                     
                     # Pass region info for seamless tiling when same image is used
-                    image_view.build_background(
+                    media_view.build_background(
                         container_classes='absolute inset-0',
                         theme_overlay_opacity=theme_overlay_opacity,
                         theme_blur_default=theme_blur_radius,

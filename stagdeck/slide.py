@@ -249,7 +249,7 @@ class Slide:
                     ui.label('Left-aligned content')
         """
         from nicegui import ui
-        from .components.content_elements import ImageView
+        from .components.content_elements import MediaView
         
         # Alignment classes
         align_classes = {
@@ -267,11 +267,11 @@ class Slide:
         # Add background if specified
         if background:
             if background.startswith('url(') or background.startswith('/'):
-                # Image background
+                # Image/video background
                 bg_url = background if background.startswith('url(') else f'url({background})'
-                image_view = ImageView(bg_url, background_modifiers)
+                media_view = MediaView.from_string(bg_url, background_modifiers)
                 with container:
-                    image_view.build_background(
+                    media_view.build_background(
                         container_classes='absolute inset-0',
                         theme_overlay_opacity=0.5,
                     )
@@ -308,7 +308,7 @@ class Slide:
                     ui.label('Content on right')
         """
         from nicegui import ui
-        from .components.content_elements import ImageView
+        from .components.content_elements import MediaView
         
         # Position-based sizing
         if position == 'left':
@@ -339,9 +339,9 @@ class Slide:
         if background:
             if background.startswith('url(') or background.startswith('/'):
                 bg_url = background if background.startswith('url(') else f'url({background})'
-                image_view = ImageView(bg_url, background_modifiers)
+                media_view = MediaView.from_string(bg_url, background_modifiers)
                 with container:
-                    image_view.build_background(
+                    media_view.build_background(
                         container_classes='absolute inset-0',
                         theme_overlay_opacity=0.5,
                     )
@@ -381,7 +381,7 @@ class Slide:
         from .components.slide_layout import (
             _get_background_style, _has_background_image, DEFAULT_CONFIG
         )
-        from .components.content_elements import ImageView
+        from .components.content_elements import MediaView
         
         style = self.get_style(master_slide, deck)
         config = DEFAULT_CONFIG
@@ -428,15 +428,15 @@ class Slide:
                     clip_classes = 'absolute inset-x-0 bottom-0 h-1/2 overflow-hidden'
                 
                 with ui.element('div').classes(clip_classes):
-                    image_view = ImageView(self.background_color, self.background_modifiers)
-                    image_view.build_background(
+                    media_view = MediaView.from_string(self.background_color, self.background_modifiers)
+                    media_view.build_background(
                         container_classes='w-full h-full',
                         theme_overlay_opacity=theme_overlay_opacity,
                         theme_blur_default=theme_blur_radius,
                     )
             elif has_bg_image:
-                image_view = ImageView(self.background_color, self.background_modifiers)
-                image_view.build_background(
+                media_view = MediaView.from_string(self.background_color, self.background_modifiers)
+                media_view.build_background(
                     container_classes='absolute inset-0',
                     theme_overlay_opacity=theme_overlay_opacity,
                     theme_blur_default=theme_blur_radius,
@@ -504,6 +504,7 @@ class Slide:
             step=step,
             style=style,
             final_content=self.get_sizing_content(),
+            deck=deck,
         )
     
     def get_step_name(self, step: int) -> str:

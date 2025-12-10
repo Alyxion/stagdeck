@@ -58,7 +58,10 @@ class SlideDeck:
     :ivar slides: List of Slide objects.
     :ivar width: Slide width in pixels (default 1920).
     :ivar height: Slide height in pixels (default 1080).
-    :ivar default_background: Default background style for all slides.
+    :ivar default_background: Default background for all slides (color, gradient, or image URL).
+        Applied to slides that don't have their own background set.
+        Examples: '#1a1a2e', 'linear-gradient(...)', 'url(/media/bg.jpg)', '/media/bg.mp4'
+    :ivar default_background_modifiers: Modifiers for default background (e.g., 'blur:8 overlay:0.5').
     :ivar default_layout: Default layout name from master deck.
     :ivar default_style: Default LayoutStyle for all slides (cascade fallback).
     :ivar default_step_duration: Default duration in seconds for each step.
@@ -73,6 +76,7 @@ class SlideDeck:
     width: int = 1920
     height: int = 1080
     default_background: str = ''
+    default_background_modifiers: str = ''
     default_layout: str = ''
     default_style: 'LayoutStyle | None' = None
     default_step_duration: float = 5.0
